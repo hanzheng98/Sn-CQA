@@ -14,6 +14,7 @@ from scipy.sparse.linalg import eigsh
 from scipy.linalg import eigh, eigvalsh
 from sympy.combinatorics import Permutation as Perm
 from sympy.interactive import init_printing
+from jax.scipy.linalg import expm
 
 
 class FourierFilters:
@@ -68,20 +69,23 @@ class FourierFilters:
             rep_mat_H = np.add(rep_mat0, rep_mat1)
             return rep_mat_H
 
+
+
     # def Compute_Eig(self, rep_mat_H):
     #     v, w = np.linalg.eig(rep_mat_H.astype('float64'))
     #     self.EDgs_energy = v[np.argmin(v)]
     #     self.EDgs = w[np.argmin(w)]
 
-    # def ED_Ham(self, rep_mat_H):
-    #     E_gs, V_gs= eigvalsh(rep_mat_H.astype('float64'), subset_by_index=[0, 1])
-    #     return E_gs, V_gs
+    def ED_Ham(self):
+        Ham = self.Ham_rep()
+        E_gs, V_gs = eigh(Ham.astype('float64'), subset_by_index=[0,1])
+        return E_gs[0], V_gs[:,0]
 
     def get_YJMs(self, k, l, opt= 'rep'):
         # compute X_k X_l for the YJM elements and by default X_1 = e
         Xkl = []
         if k == l == 1:
-            return jnp.diag(jnp.ones(self.dim))
+            return np.diag(np.ones(self.dim))
         for i in range(1, max(k, l)):
             pi = self.group('({}, {})'.format(i, max(k, l)))
 
@@ -95,7 +99,7 @@ class FourierFilters:
         if opt =='exact':
             return Xkl
         elif opt == 'rep':
-            YJM_rep = jnp.zeros((self.dim, self.dim))
+            YJM_rep = np.zeros((self.dim, self.dim))
             # print(Xkl)
             for i in range(len(Xkl)):
                 # print(Xkl[i])
@@ -110,31 +114,44 @@ class FourierFilters:
             print('the parameters are not complex valued ')
             raise ValueError
         YJM_conv = jnp.ones(self.dim)
+        YJMparams = jnp.multiply(1j, YJMparams)
         for i in range(1, self.Nsites + 1):
             if i == self.Nsites:
                 YJM_rep = self.get_YJMs(int(i), int(i))
+                YJM_rep = jnp.diag(jnp.asarray(YJM_rep.astype('float64')))
                 # print(YJM_rep)
-                YJM_rep = jnp.multiply(jnp.asarray(1j, dtype='complex128'), jnp.asarray(YJM_rep.astype('complex128')))
+                # YJM_rep = jnp.multiply(jnp.asarray(1j, dtype='complex128'), YJM_rep)
+
+                # YJMparams = YJMparams.at[int(i), int(i)].multiply(jnp.asarray(1j, dtype='complex128'))
+                # print(YJMparams.at[int(i), int(j)].get())
                 exp_YJM_rep = jnp.exp(jnp.multiply(YJMparams.at[int(i), int(i)].get(), YJM_rep))
                 # exp_YJM_rep = jnp.diag(exp_YJM_rep)
                 # exp_YJM_rep = exp_YJM_rep / jnp.linalg.norm(exp_YJM_rep, ord='fro')
-                YJM_conv = jnp.matmul(YJM_conv, exp_YJM_rep)
+                YJM_conv = jnp.multiply(YJM_conv, exp_YJM_rep)
             for j in range(i, self.Nsites + 1):
-                # print('i = {}, j = {}'.format(i,j))
-                YJM_rep = jnp.asarray(self.get_YJMs(int(i), int(j)).astype('complex128'))
-                YJM_rep = jnp.multiply(jnp.asarray(1j, dtype='complex128'),YJM_rep)
+                YJM_rep = self.get_YJMs(int(i), int(j))
+                YJM_rep = jnp.diag(jnp.asarray(YJM_rep.astype('float64')))
+                # YJMparams = YJMparams.at[int(i), int(j)].multiply(jnp.asarray(1j, dtype='complex128'))
+                # print(YJMparams.at[int(i), int(j)].get())
+                # YJM_rep = jnp.multiply(jnp.asarray(1j, dtype='complex128'),YJM_rep)
                 exp_YJM_rep = jnp.exp(jnp.multiply(YJMparams.at[int(i), int(j)].get(), YJM_rep))
                 # exp_YJM_rep = jnp.diagexp_YJM_rep)
                 # exp_YJM_rep = exp_YJM_rep / jnp.linalg.norm(exp_YJM_rep, ord ='fro')
                 # print(exp_YJM_rep)
-                YJM_conv = jnp.matmul(YJM_conv, exp_YJM_rep)
+                # print(YJM_conv.shape)
+                # print(exp_YJM_rep.shape)
+                YJM_conv = jnp.multiply(YJM_conv, exp_YJM_rep)
+
+               # return a diagonal matrix
         return jnp.diag(YJM_conv / jnp.linalg.norm(YJM_conv))
 
     def Heis_Conv2d(self, Hparam, rep_mat_H):
-        Heis_conv = jnp.exp(jnp.multiply(Hparam, jnp.asarray(rep_mat_H.astype('complex128'))))
-        Heis_conv = jnp.multiply(jnp.asarray(1j, dtype='complex128'), Heis_conv)
+        # rep_mat_H = self.Ham_rep()
+        Hparam = jnp.multiply(Hparam, 1j)
+        # Heis_conv = expm(jnp.multiply(Hparam, jnp.asarray(rep_mat_H.astype('complex128'))))
+        Heis_conv = expm(jnp.multiply(Hparam, jnp.asarray(rep_mat_H.astype('float64'))))
 
-        return Heis_conv / jnp.linalg.norm(Heis_conv, ord='fro')
+        return Heis_conv / jnp.linalg.norm(Heis_conv)
 
     def CSn_Ansazte(self, YJMparams, Hparams):
         rep_mat_H = self.Ham_rep()
