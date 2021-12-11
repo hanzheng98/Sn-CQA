@@ -1,8 +1,6 @@
 import numpy as np
 import matplotlib as plt
 import numpy.linalg as LA
-from sage.combinat.symmetric_group_representations import SymmetricGroupRepresentation
-from sage.combinat.permutation import *
 import scipy
 import netket as nk
 import jax
@@ -15,6 +13,13 @@ from scipy.linalg import eigh, eigvalsh
 from sympy.combinatorics import Permutation as Perm
 from sympy.interactive import init_printing
 from jax.scipy.linalg import expm
+#
+
+import numpy
+import torch
+import cnine
+import Snob2
+
 
 
 class FourierFilters:
@@ -94,6 +99,10 @@ class FourierFilters:
         Ham = self.Ham_rep()
         E_gs, V_gs = eigh(Ham.astype('float64'), subset_by_index=[0,1])
         return E_gs[0], V_gs[:,0]
+
+    def trans_2_line(self, i, j):
+        line = [i for i in range(1, self.Nsites+1)]
+
 
     def get_YJMs(self, k, l, opt= 'rep'):
         # compute X_k X_l for the YJM elements and by default X_1 = e

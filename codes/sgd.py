@@ -21,7 +21,7 @@ class CSnGradient(FourierFilters):
 
     '''
 
-    def __init__(self, lr=float(0.05), max_iter=int(501), gamma=float(0.95), num_samples=None, **kwargs):
+    def __init__(self, lr=float(2e-3), max_iter=int(1001), gamma=float(0.95), num_samples=None, **kwargs):
         super(CSnGradient, self).__init__(**kwargs)
         self.lr = lr
         self.max_iter = max_iter
@@ -47,6 +47,16 @@ class CSnGradient(FourierFilters):
             Hparams = Hparams.at[i].set(jnp.multiply(scale, random.normal(b_key)))
         return YJMparams, Hparams
 
+    '''
+    -----------------------------------------------------------------------
+    
+    Custom derivative method (used for exact gradient at the level of energy functional) 
+    
+    Needed to update also the reverse mode auto-diff 
+    
+    ----------------------------------------------------------------------
+    '''
+
     # @custom_jvp
     def CSn_VStates(self,YJMparams, Hparams):
         '''
@@ -70,28 +80,28 @@ class CSnGradient(FourierFilters):
         return GSket / jnp.linalg.norm(GSket)
 
     # @CSn_VStates.defjvp
-    def CSn_Ansazte_jvp(self,primals, tangents):
-        '''
-
-        Not for current use as still working on modify the custom derivative rules
-
-        :param primals:
-        :param tangents:
-        :return:
-        '''
-        YJMparams, Hparams = primals
-        YJMparams_dot, Hparams_dot = tangents
-        primal_out = self.CSn_VStates(YJMparams, Hparams)
-        tangent_out = jnp.zeros(self.dim)
-        for i in range(self.p):
-            tangent_out += self.CSn_Ansazte_jvp_aux([int(1), int(1), i], i, YJMparams, Hparams, opt='H')
-            for k, l in zip(range(1,self.Nsites+1), range(1,self.Nsites+1)):
-                if k > l:
-                    pass
-                else:
-                    tangent_out += self.CSn_Ansazte_jvp_aux([k,l,i], i, YJMparams, Hparams, opt='YJM')
-
-        return primal_out, tangent_out
+    # def CSn_Ansazte_jvp(self,primals, tangents):
+    #     '''
+    #
+    #     Not for current use as still working on modify the custom derivative rules
+    #
+    #     :param primals:
+    #     :param tangents:
+    #     :return:
+    #     '''
+    #     YJMparams, Hparams = primals
+    #     YJMparams_dot, Hparams_dot = tangents
+    #     primal_out = self.CSn_VStates(YJMparams, Hparams)
+    #     tangent_out = jnp.zeros(self.dim)
+    #     for i in range(self.p):
+    #         tangent_out += self.CSn_Ansazte_jvp_aux([int(1), int(1), i], i, YJMparams, Hparams, opt='H')
+    #         for k, l in zip(range(1,self.Nsites+1), range(1,self.Nsites+1)):
+    #             if k > l:
+    #                 pass
+    #             else:
+    #                 tangent_out += self.CSn_Ansazte_jvp_aux([k,l,i], i, YJMparams, Hparams, opt='YJM')
+    #
+    #     return primal_out, tangent_out
 
     def CSn_Ansazte_jvp_aux(self,YJM_ind, H_ind, YJMparams, Hparams, opt='YJM'):
         '''
@@ -101,7 +111,7 @@ class CSnGradient(FourierFilters):
         :return: a sum of two case
         '''
 
-        diff_YJM = jnp.diag(jnp.ones(self.dim))
+        diff_YJM = float(1.0)
         Ham_rep = self.Ham_rep()
         Ham_rep = jnp.asarray(Ham_rep.astype('float64'))
         GSket = jnp.zeros(self.dim)
@@ -111,73 +121,157 @@ class CSnGradient(FourierFilters):
             GSket = jnp.add(GSket, basis)
         GSket = GSket / jnp.linalg.norm(GSket)
         if opt == 'YJM':
-            for i in range(self.p):
-                if H_ind == i:
-                    H_evo = self.Heis_Conv2d(Hparams.at[H_ind].get(), Ham_rep)
-                    YJM_evo = self.YJM_Conv2d(YJMparams.at[:, :, H_ind].get())
-                    YJM = self.get_YJMs(YJM_ind[int(0)], YJM_ind[int(0)])
-                    YJM = jnp.asarray(YJM.astype('float64'))
-                    YJM = jnp.matmul(jnp.multiply(complex(1j), YJM))
-                    diff_YJM = jnp.matmul(H_evo, diff_YJM)
-                    diff_YJM = jnp.matmul(YJM_evo, diff_YJM)
-                    diff_YJM = jnp.matmul(YJM, diff_YJM)
+            if H_ind == int(0):
+                ansatze2 = float(1.0)
+                H_evo = self.Heis_Conv2d(Hparams.at[H_ind].get())
+                YJM_evo = self.YJM_Conv2d(YJMparams.at[:, :, H_ind].get())
+                YJM = self.get_YJMs(YJM_ind[int(0)], YJM_ind[int(1)])
+                YJM = jnp.asarray(YJM.astype('float64'))
+                YJM = jnp.multiply(complex(1j), YJM)
+                diff_YJM = jnp.multiply(H_evo, diff_YJM)
+                diff_YJM = jnp.matmul(YJM_evo, diff_YJM)
+                diff_YJM = jnp.matmul(YJM, diff_YJM)
+                for i in range(1, self.p):
+                    ansatze = jnp.matmul(self.YJM_Conv2d(YJMparams.at[:, :, i].get()),
+                                         self.Heis_Conv2d(Hparams.at[i].get()))
+                    ansatze2 = jnp.multiply(ansatze, ansatze2)
+                diff_YJM = jnp.matmul(ansatze2, diff_YJM)
+            else:
+                ansatze1 = float(1.0)
+                ansatze2 = float(1.0)
+                for i in range(H_ind):
+                    ansatze = jnp.matmul(self.YJM_Conv2d(YJMparams.at[:, :, i].get()),
+                                         self.Heis_Conv2d(Hparams.at[i].get()))
+                    ansatze1 = jnp.multiply(ansatze, ansatze1)
 
-                ansatze = jnp.matmul(self.YJM_Conv2d(YJMparams.at[:, :, i].get()),
-                                     self.Heis_Conv2d(Hparams.at[i].get(), Ham_rep))
-                ansatze = ansatze / jnp.linalg.norm(ansatze)
-                diff_YJM = jnp.matmul(ansatze, diff_YJM)
+                for i in range(H_ind, self.p+1):
+                    if i == H_ind:
+                        H_evo = self.Heis_Conv2d(Hparams.at[H_ind].get())
+                        YJM_evo = self.YJM_Conv2d(YJMparams.at[:, :, H_ind].get())
+                        YJM = self.get_YJMs(YJM_ind[int(0)], YJM_ind[int(1)])
+                        YJM = jnp.asarray(YJM.astype('float64'))
+                        YJM = jnp.multiply(complex(1j), YJM)
+                        diff_YJM = jnp.multiply(H_evo, diff_YJM)
+                        diff_YJM = jnp.matmul(YJM_evo, diff_YJM)
+                        diff_YJM = jnp.matmul(YJM, diff_YJM)
+                        diff_YJM = jnp.matmul(diff_YJM, ansatze1)
+                    elif i == self.p:
+                        pass
+
+                    else:
+                        ansatze = jnp.matmul(self.YJM_Conv2d(YJMparams.at[:, :, i].get()),
+                                             self.Heis_Conv2d(Hparams.at[i].get()))
+                        ansatze2 = jnp.multiply(ansatze, ansatze2)
+                diff_YJM = jnp.matmul(ansatze2, diff_YJM)
             return jnp.matmul(diff_YJM, GSket)
 
         elif opt == 'H':
-            diff_H = jnp.diag(jnp.ones(self.dim))
+            diff_H = float(1.0)
             # Ham_rep = self.Ham_rep()
             # Ham_rep = jnp.asarray(Ham_rep.astype('float64'))
-            Ham_rep = jnp.matmul(complex(1j), Ham_rep)
-            for i in range(self.p):
-                if H_ind == i:
-                    H_evo = self.Heis_Conv2d(Hparams.at[H_ind].get(), Ham_rep)
-                    YJM_evo = self.YJM_Conv2d(YJMparams.at[:, :, H_ind].get())
-                    diff_H = jnp.matmul(H_evo, diff_H)
-                    diff_H = jnp.matmul(Ham_rep, diff_H)
-                    diff_H = jnp.matmul(YJM_evo, diff_H)
+            Ham_rep = jnp.multiply(complex(1j), Ham_rep)
+            # ansatze1 = jnp.diag(jnp.ones(self.dim))
+            # ansatze2 = jnp.diag(jnp.ones(self.dim))
+            if H_ind == int(0):
+                ansatze2 = float(1.0)
+                H_evo = self.Heis_Conv2d(Hparams.at[H_ind].get())
+                YJM_evo = self.YJM_Conv2d(YJMparams.at[:, :, H_ind].get())
+                diff_H = jnp.multiply(H_evo, diff_H)
+                diff_H = jnp.matmul(Ham_rep, diff_H)
+                diff_H = jnp.matmul(YJM_evo, diff_H)
+                # ansatze1 = jnp.matmul(diff_H, ansatze1)
+                for i in range(1, self.p):
+                    ansatze = jnp.matmul(self.YJM_Conv2d(YJMparams.at[:, :, i].get()),
+                                         self.Heis_Conv2d(Hparams.at[i].get()))
+                    print('norm of intermeidate ansatze: {}'.format(jnp.linalg.norm(ansatze)))
+                    ansatze2 = jnp.multiply(ansatze, ansatze2)
+                print('norm of ansatze: {}'.format(jnp.linalg.norm(ansatze2)))
+                diff_H = jnp.matmul(ansatze2, diff_H)
+            else:
+                ansatze1 = float(1.0)
+                ansatze2 = float(1.0)
+                for i in range(H_ind):
+                    ansatze = jnp.matmul(self.YJM_Conv2d(YJMparams.at[:, :, i].get()),
+                                         self.Heis_Conv2d(Hparams.at[i].get()))
+                    ansatze1 = jnp.multiply(ansatze, ansatze1)
 
-                ansatze = jnp.matmul(self.YJM_Conv2d(YJMparams.at[:, :, i].get()),
-                                     self.Heis_Conv2d(Hparams.at[i].get(), Ham_rep))
-                ansatze = ansatze / jnp.linalg.norm(ansatze)
-                diff_H = jnp.matmul(ansatze, diff_H)
+                for i in range(H_ind, self.p + 1):
+                    if i == H_ind:
+                        H_evo = self.Heis_Conv2d(Hparams.at[H_ind].get())
+                        YJM_evo = self.YJM_Conv2d(YJMparams.at[:, :, H_ind].get())
+                        diff_H = jnp.multiply(H_evo, diff_H)
+                        diff_H = jnp.matmul(Ham_rep, diff_H)
+                        diff_H = jnp.matmul(YJM_evo, diff_H)
+                        diff_H = jnp.matmul(diff_H, ansatze1)
 
-            return jnp.matmul(diff_YJM, GSket)
+                    elif i == self.p:
+                        pass
+
+                    else:
+                        ansatze = jnp.matmul(self.YJM_Conv2d(YJMparams.at[:, :, i].get()),
+                                             self.Heis_Conv2d(Hparams.at[i].get()))
+                        ansatze2 = jnp.multiply(ansatze, ansatze2)
+
+                diff_H = jnp.matmul(ansatze2, diff_H)
+            return jnp.matmul(diff_H, GSket)
+
+
+
+
 
     def energy_jvp_aux(self, YJM_ind, H_ind, YJMparams, Hparams, opt):
 
+        '''
+        Debugging  why it returns a vector instead of scalar
+
+        :param YJM_ind:
+        :param H_ind:
+        :param YJMparams:
+        :param Hparams:
+        :param opt:
+        :return:
+        '''
         Ham_rep = jnp.asarray(self.Ham_rep().astype('float64'))
         Ham_rep = jnp.add(Ham_rep, jnp.multiply(self.num_trans, jnp.diag(jnp.ones(self.dim))))
-
-        Psi_tilde = jnp.add(self.CSn_Ansazte(YJMparams, Hparams))
+        Psi = self.CSn_VStates(YJMparams, Hparams)
+        Psi_tilde = jnp.add(Psi, jnp.conjugate(Psi))
         Psi_tilde = jnp.real(Psi_tilde)
         dev_Psi_tilde = jnp.add(self.CSn_Ansazte_jvp_aux(YJM_ind, H_ind, YJMparams, Hparams, opt=opt),
                                 jnp.conjugate(self.CSn_Ansazte_jvp_aux(YJM_ind, H_ind, YJMparams, Hparams, opt=opt)))
 
         dev_energy_var = jnp.dot(jnp.conjugate(dev_Psi_tilde), jnp.matmul(Ham_rep, Psi_tilde))
-        dev_energy_var = (jnp.dot(Psi_tilde, jnp.matmul(Ham_rep, Psi_tilde))
-                          + dev_energy_var)/ jnp.dot(Psi_tilde, Psi_tilde)
+        dev_energy_var = (jnp.inner(Psi_tilde, jnp.matmul(Ham_rep, Psi_tilde))
+                          + dev_energy_var)/ jnp.inner(Psi_tilde, Psi_tilde)
         temp = jnp.dot(jnp.conjugate(dev_Psi_tilde), Psi_tilde) + jnp.dot(Psi_tilde, dev_Psi_tilde)
         dev_energy_var -= jnp.multiply(self.Expect_braket_energy(YJMparams, Hparams),
-                                       temp /jnp.dot(Psi_tilde, Psi_tilde))
+                                       temp / jnp.dot(Psi_tilde, Psi_tilde))
 
         return dev_energy_var
 
 
 
+    def energy_jvp(self, YJMparams, Hparams):
+        grad_yjm = jnp.zeros(YJMparams.shape)
+        grad_h = jnp.zeros(Hparams.shape)
+        for i in range(self.p):
+            grad_h = grad_h.at[i].set(self.energy_jvp_aux([int(1), int(1), i], i, YJMparams, Hparams, 'H'))
 
+            for k, l in zip(range(1,self.Nsites+1), range(1,self.Nsites+1)):
+                if k > l:
+                    pass
+                else:
+                    print(self.CSn_Ansazte_jvp_aux([k,l,i], i, YJMparams, Hparams, 'YJM'))
+                    grad_yjm = grad_yjm.at[k, l, i].set(self.CSn_Ansazte_jvp_aux([k,l,i], i, YJMparams, Hparams, 'YJM'))
 
+        return grad_yjm, grad_h
 
+    '''
+    -------------------------------------------------------------------------------------------------------
 
+    Loss function Designs 
 
-
-
-
-
+    ------------------------------------------------------------------------------------------------------
+    '''
 
     def Expect_braket(self, YJMparams, Hparams):
         groundstate = self.CSn_VStates(YJMparams, Hparams)
@@ -217,12 +311,29 @@ class CSnGradient(FourierFilters):
         E_gs, V_gs = self.ED_Ham()
         V_gs = jnp.asarray(V_gs)
         trial_state = self.CSn_VStates(YJMparams, Hparams)
-        return jnp.subtract(float(1.0), jnp.abs(jnp.dot(V_gs, trial_state)))
+        # print('norm of the ground state: {}'.format(jnp.linalg.norm(V_gs)))
+        print('probability of cross section: {}'.format(jnp.power(jnp.dot(V_gs, trial_state), int(2))))
+        return jnp.power(jnp.subtract(jnp.power(jnp.dot(V_gs, trial_state), int(2)), float(1.0)), int(2))
+
+    '''
+    ---------------------------------------------------------------------
+
+    Gradient Descent Mathods: 
+
+    (1) Gradient with momentum 
+
+    (2) Nadam 
+
+    (3) Stochastic Reconfigration  (Natural Gradient) 
+
+
+    ---------------------------------------------------------------------
+    '''
 
 
 
 
-    def GD_momentum(self, scale=float(1e0), opt='expectation'):
+    def GD_momentum(self, scale=float(1e0), Params = None, mode = 'jax', opt='expectation'):
 
         """Performs linear regression using batch gradient descent + momentum
 
@@ -233,7 +344,11 @@ class CSnGradient(FourierFilters):
         # Some configurations
         LOG = True
 
-        YJMparams, Hparams = self.random_params2(scale = scale )
+        if Params is None:
+            YJMparams, Hparams = self.random_params2(scale = scale )
+        else:
+            YJMparams = Params[0]
+            Hparams = Params[1]
 
         # To keep track of velocity parameters
         params_v = {
@@ -243,37 +358,41 @@ class CSnGradient(FourierFilters):
          # print('shape of the params_v[YJM]: {}'.format(params_v['YJM'].shape))
 
         # Define the gradient function w.r.t w and b
-        if opt=='expectation':
-            grad_YJM = jax.jit(jax.grad(self.Expect_braket, argnums=int(0)))# argnums indicates which variable to differentiate with from the parameters list passed to the function
-            grad_H = jax.jit(jax.grad(self.Expect_braket, argnums=int(1)))
+        if mode == 'jax':
+            if opt=='expectation':
+                grad_YJM = jax.jit(jax.grad(self.Expect_braket, argnums=int(0))) # argnums indicates which variable to differentiate with from the parameters list passed to the function
+                grad_H = jax.jit(jax.grad(self.Expect_braket, argnums=int(1)))
 
-        elif opt == 'overlap_energy':
-            grad_YJM = jax.jit(jax.grad(self.Expect_OverlapE, argnums=int(
-                0)))  # argnums indicates which variable to differentiate with from the parameters list passed to the function
-            grad_H = jax.jit(jax.grad(self.Expect_OverlapE, argnums=int(1)))
+            elif opt == 'overlap_energy':
+                grad_YJM = jax.jit(jax.grad(self.Expect_OverlapE, argnums=int(0)))  # argnums indicates which variable to differentiate with from the parameters list passed to the function
+                grad_H = jax.jit(jax.grad(self.Expect_OverlapE, argnums=int(1)))
 
-        elif opt == 'overlap_state':
-            grad_YJM = jax.jit(jax.grad(self.Expect_OverlapS, argnums=int(
-                0)))  # argnums indicates which variable to differentiate with from the parameters list passed to the function
-            grad_H = jax.jit(jax.grad(self.Expect_OverlapS, argnums=int(1)))
+            elif opt == 'overlap_state':
+                grad_YJM = jax.jit(jax.grad(self.Expect_OverlapS, argnums=int(0))) # argnums indicates which variable to differentiate with from the parameters list passed to the function
+                grad_H = jax.jit(jax.grad(self.Expect_OverlapS, argnums=int(1)))
 
-        else:
-            raise ValueError
+            else:
+                pass
 
-        # Run once to compile JIT (Just In Time). The next uses of grad_W and grad_B will now be fast
 
-        # vgrad(self.Expect_braket, Params)
-        #         grad_H(YJMparams, Hparams)
-        grad_YJM(YJMparams, Hparams)
-        grad_H(YJMparams, Hparams)
+            # Run once to compile JIT (Just In Time). The next uses of grad_W and grad_B will now be fast
+
+
+            grad_YJM(YJMparams, Hparams)
+            grad_H(YJMparams, Hparams)
 
         for i in range(self.max_iter):
             # Gradient w.r.t. argumnet index 1 i.e., w
             #             grad_yjm = grad_YJM(YJMparams, Hparams)
 
-            grad_yjm = grad_YJM(YJMparams, Hparams)
-            grad_h = grad_H(YJMparams, Hparams)
-
+            if mode == 'jax':
+                grad_yjm = grad_YJM(YJMparams, Hparams)
+                grad_h = grad_H(YJMparams, Hparams)
+            elif mode == 'exact':
+                grad_yjm = self.energy_jvp(YJMparams, Hparams)
+                grad_h = self.energy_jvp(YJMparams, Hparams)
+            else:
+                raise ValueError
 
             if grad_yjm.shape != params_v['YJM'].shape:
                 print('dim for the grad_yjm: {}'.format(grad_yjm.shape))
@@ -292,7 +411,7 @@ class CSnGradient(FourierFilters):
                 params_v['H'] = jnp.add(jnp.multiply(self.gamma, params_v['H']), grad_h)
 
 
-            if i % int(20) == int(0):
+            if i % int(50) == int(0):
 
                 print('shape of updated params_v[H]: {}'.format(params_v['H'].shape))
                 print('shape of updated params_v[YJM]: {}'.format(params_v['YJM'].shape))
@@ -303,9 +422,14 @@ class CSnGradient(FourierFilters):
 
             Hparams -= jnp.multiply(self.lr, params_v['H'])
 
-            if LOG and i % int(50) == int(0):
-                print('energy expectation at iteration {}: --- ({})'.format(i,
-                                                                            self.Expect_braket_energy(YJMparams, Hparams)))
+            if LOG and i % int(100) == int(0):
+                if opt == 'overlap_state':
+                    print('energy expectation at iteration {}: --- ({})'.format(i,
+                                                                            self.Expect_OverlapS(YJMparams, Hparams)))
+                else:
+                    print('energy expectation at iteration {}: --- ({})'.format(i,
+                                                                                self.Expect_braket_energy(YJMparams,
+                                                                                                     Hparams)))
 
         return YJMparams, Hparams
 
@@ -315,8 +439,10 @@ class CSnGradient(FourierFilters):
         pass
 
 
-    def nadam(self,J,  delta1=float(0.9), delta2=float(0.999), scale = float(1.0)):
-        """Performs linear regression using nadam
+    def CSn_nadam(self,J,  Params = None, delta1=float(0.9), delta2=float(0.999), scale = float(1.0), mode = 'jax'):
+
+        """
+        Using Nadam to accelerate the gradient descent
 
         Args:
             J: cost function  like self.Expect_braket or self.Expect_overlapS
@@ -324,14 +450,27 @@ class CSnGradient(FourierFilters):
             delta2: decay parameter 2
 
         Returns:
-            params: the weights and bias after performing the optimization
+            params: the optimized YJMparams, Hparams
         """
+
+        '''
+        ----------------------------------------------------
+        The best learning rate for the Expect_overlapS is self.lr = float(2e-3)
+        
+        
+        ---------------------------------------------------
+        
+        '''
         # Some configurations
-        LOG = False
+        LOG = True
         # lr = float(0.5)  # Learning rate
         e = float(1e-7)  # Epsilon value to prevent the fractions going to infinity when denominator is zero
 
-        YJMparams, Hparams = self.random_params2(scale=scale)
+        if Params is None:
+            YJMparams, Hparams = self.random_params2(scale=scale)
+        else:
+            YJMparams = Params[0]
+            Hparams = Params[1]
 
 
         # To keep track of velocity parameters
@@ -346,19 +485,22 @@ class CSnGradient(FourierFilters):
             'H': jnp.zeros(Hparams.shape)
         }
 
-        # Define the gradient function w.r.t w and b
+        # print('squared_grad: {}'.format(squared_grad['H'].shape))
+
+        # Define the gradient function w.r.t yjm and b
         grad_YJM= jax.jit(jax.grad(J,
                                   argnums=int(0)))  # argnums indicates which variable to differentiate with from the parameters list passed to the function
-        grad_H = jax.jit(jax.grad(J, argnums=int(0)))
+        grad_H = jax.jit(jax.grad(J, argnums=int(1)))
 
-        # Run once to compile JIT (Just In Time). The next uses of grad_W and grad_B will now be fast
+        # Run once to compile JIT (Just In Time). The next uses of grad_yjm and grad_h will now be fast
         grad_YJM(YJMparams, Hparams)
         grad_H(YJMparams, Hparams)
-
-        for i in range(int(1000)):
-            # Gradient w.r.t. argumnet index 1 i.e., w
+        energy_list = []
+        for i in range(self.max_iter):
+            # Gradient w.r.t. argumnet index 1 i.e., YJMparams
             grad_yjm= grad_YJM(YJMparams, Hparams)
-            # Gradient w.r.t. argumnet index 2 i.e., b
+
+            # Gradient w.r.t. argumnet index 2 i.e., Hparams
             grad_h = grad_H(YJMparams, Hparams)
 
             # Momements update
@@ -393,10 +535,22 @@ class CSnGradient(FourierFilters):
                         jnp.add(jnp.multiply(delta1 , moment_h) , jnp.multiply(jnp.subtract(float(1) , delta1) ,grad_h )
                         / jnp.subtract(float(1) , jnp.power(delta2, (jnp.add(i , int(1)))))))
 
-            if LOG and i % 50 == 0:
-                print('energy expectation at iteration {}: --- ({})'.format(i, self.Expect_braket_energy(YJMparams, Hparams)))
 
-        return YJMparams, Hparams
+            if LOG and i % 5 == 0:
+                print('updated gradient squared: {}---{}'.format(squared_grad['YJM'].shape, squared_grad['H'].shape))
+                print('updated bia correction have the shape: {}--{}'.format(moment_squared_yjm.shape, moment_squared_h.shape))
+                print('updated YJMparams, Hparams have the shape: {}, {}'.format(YJMparams.shape, Hparams.shape))
+                # loss = J(YJMparams, Hparams)
+                loss_energy = self.Expect_braket_energy(YJMparams, Hparams)
+                print('energy expectation at iteration {}: --- ({})'.format(i, loss_energy))
+                energy_list.append(loss_energy)
+                # if loss < float(1e-6):
+                #     print('--------------------------------------------')
+                #     print('finding the optimized parameters for the energy expectation: {}'.format(loss))
+                #     return YJMparams, Hparams
+
+
+        return YJMparams, Hparams, energy_list
 
 
 

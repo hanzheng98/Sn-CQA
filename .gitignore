@@ -1,0 +1,13 @@
+/data
+**/**.mpack 
+**/**.log
+**/.ipynb_checkpoints
+**/.DS_Store
+/.DS_Store
+/codes/.idea/
+/codes/__pycache__/
+
+
+codes/test1.py
+codes/test_frustrated .ipynb
+ 
