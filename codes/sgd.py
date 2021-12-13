@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 import logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger('JAX SGD')
-from FourierFilters import FourierFilters
+from FouierFilters2 import FourierFilters
 from jax import random
 from jax import grad, jit, vmap
 # import tensorflow_quatum as tfq
@@ -278,6 +278,7 @@ class CSnGradient(FourierFilters):
         rep_H = self.Ham_rep().astype('float64')
         rep_H = jnp.asarray(rep_H)
         rep_H += jnp.add(rep_H, jnp.multiply(self.num_trans, jnp.diag(jnp.ones(self.dim))))
+        # make sure the Hamiltonian is positive-definite by adding scalar multiple of identitties
         return jnp.matmul(jnp.conjugate(groundstate), jnp.matmul(rep_H, groundstate)) / jnp.linalg.norm(groundstate)
 
     def Expect_braket_energy(self,YJMparams, Hparams):
@@ -439,7 +440,7 @@ class CSnGradient(FourierFilters):
         pass
 
 
-    def CSn_nadam(self,J,  Params = None, delta1=float(0.9), delta2=float(0.999), scale = float(1.0), mode = 'jax'):
+    def CSn_nadam(self,J,  Params = None, delta1=float(0.99), delta2=float(0.9999), scale = float(1.0), mode = 'jax'):
 
         """
         Using Nadam to accelerate the gradient descent

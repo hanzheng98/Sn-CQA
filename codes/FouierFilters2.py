@@ -19,6 +19,7 @@ import numpy
 import torch
 import cnine
 import Snob2
+from scipy.sparse import bsr_matrix
 
 
 
@@ -28,9 +29,9 @@ class FourierFilters:
         self.lattice = lattice
         self.Nsites = Nsites
         self.partit = partit
-        self.dim = np.array(SymmetricGroupRepresentation(self.partit, 'orthogonal').
-                            representation_matrix((1, 2))).shape[0]
-        self.group = SymmetricGroup(self.Nsites)
+        self.dim = Snob2.SnIrrep(partit).get_dim()
+        self.group = Snob2.Sn(self.Nsites)
+        self.rep = Snob2.SnIrrep(partit)
         self.p = p
         YJMs_mat = np.zeros((self.Nsites, self.Nsites, self.dim))
         for i in range(self.Nsites):
@@ -52,12 +53,6 @@ class FourierFilters:
 
         # H -------------------- a Dict() object consisting of lattice and J
 
-    def rep_matrix(self, st):
-        orth = SymmetricGroupRepresentation(self.partit, 'orthogonal')
-        #         print(st)
-        #         print(orth.representation_matrix(st))
-        mat = np.array(orth.representation_matrix(st))
-        return mat
 
     def Ham_rep(self):
         # ls = list(H.keys())
@@ -65,24 +60,24 @@ class FourierFilters:
         # dim = len(np.array(orth.representation_matrix((1, 2))))
 
         #     print(ls)
-        rep_mat0 = np.multiply(np.multiply(-1.0, len(self.lattice[0]) / 2, dtype='complex128'),
+        rep_mat0 = np.multiply(np.multiply(-1.0, len(self.lattice[0]) / 2, dtype='float64'),
                                np.diag(np.ones(self.dim)))
         for st in self.lattice[0]:
             #         print(H[ls[0]])
             # print(st)
-            rep_st = self.rep_matrix(st)
+            rep_st = self.rep.transp(st[0], st[1]).torch().numpy()
             #         print(rep_st)
             rep_mat0 = np.add(rep_mat0, rep_st)
         rep_mat0 = np.multiply(self.J[0] / 2, rep_mat0)
         if float(self.J[1]) == float(0):
             return rep_mat0
         else:
-            rep_mat1 = np.multiply(np.multiply(-1.0, len(self.lattice[1]) / 2, dtype='complex128'),
+            rep_mat1 = np.multiply(np.multiply(-1.0, len(self.lattice[1]) / 2, dtype='float64'),
                                    np.diag(np.ones(self.dim)))
             for st in self.lattice[1]:
-                rep_st = self.rep_matrix(st)
+                rep_st = self.rep.transp(st[0], st[1]).torch().numpy()
                 #         print(rep_st)
-                rep_mat1 = rep_mat1 + rep_st
+                rep_mat1 = np.add(rep_mat1 ,rep_st)
             rep_mat1 = np.multiply(self.J[1] / 2, rep_mat1)
             rep_mat_H = np.add(rep_mat0, rep_mat1)
 
@@ -100,36 +95,24 @@ class FourierFilters:
         E_gs, V_gs = eigh(Ham.astype('float64'), subset_by_index=[0,1])
         return E_gs[0], V_gs[:,0]
 
-    def trans_2_line(self, i, j):
-        line = [i for i in range(1, self.Nsites+1)]
 
 
-    def get_YJMs(self, k, l, opt= 'rep'):
+    def get_YJMs(self, k, l):
         # compute X_k X_l for the YJM elements and by default X_1 = e
-        Xkl = []
+        Xkl= np.zeros((self.dim, self.dim))
         if k == l == 1:
             return np.diag(np.ones(self.dim))
         for i in range(1, max(k, l)):
-            pi = self.group('({}, {})'.format(i, max(k, l)))
-
+            # pi = self.group('({}, {})'.format(i, max(k, l)))
+            pi = self.rep.transp(i, max(k, l)).torch().numpy()
             if min(k, l) == 1:
-                Xkl.append(pi)
-            for j in range(i, min(k, l)):
-                # print(j)
-                pj = self.group('({}, {})'.format(j, min(k, l)))
-                # print(pj)
-                Xkl.append(pi * pj)
-        if opt =='exact':
-            return Xkl
-        elif opt == 'rep':
-            YJM_rep = np.zeros((self.dim, self.dim))
-            # print(Xkl)
-            for i in range(len(Xkl)):
-                # print(Xkl[i])
-                rep_m = self.rep_matrix(Xkl[i])
-                YJM_rep = np.add(YJM_rep, rep_m)
-                # print('YJM_rep at iteration {}: --- {}'.format(i, YJM_rep))
-            return YJM_rep
+                Xkl = np.add(Xkl, pi)
+            else:
+                for j in range(1, min(k, l)):
+                    pj = self.rep.transp(j, min(k,l)).torch().numpy()
+                    pij = np.matmul(pi, pj)
+                    Xkl = np.add(Xkl, pij)
+        return Xkl
 
     def YJM_Conv2d(self, YJMparams):
         # params for the YJM Hamiltonian ------ n(n+1)/2 params per layer of YJM

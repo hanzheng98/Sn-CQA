@@ -105,7 +105,7 @@ class FourierFilters:
 
             if min(k, l) == 1:
                 Xkl.append(pi)
-            for j in range(i, min(k, l)):
+            for j in range(1, min(k, l)):
                 # print(j)
                 pj = self.group('({}, {})'.format(j, min(k, l)))
                 # print(pj)
