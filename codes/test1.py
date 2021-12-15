@@ -55,7 +55,7 @@ KetNet Kagomme Lattice
 '''
 
 
-J = [1, 0.8]
+J = [1, 0.5]
 # graph = nk.graph.Grid(extent= [2,4], pbc=False)
 # edges = graph.edges
 # nx.draw(graph.to_networkx(), with_labels=True, font_weight='bold')
@@ -145,24 +145,24 @@ Sn-CQA Ansatze testing phase
 
 -----------------------------------------------------------------------------
 '''
-
-J = CsnFourier.Expect_braket
-opt_YJM, opt_H, opt_energy_list= CsnFourier.CSn_nadam(J, scale=float(1e-1))
-
-import pandas as pd
-
-df = pd.DataFrame(opt_energy_list)
-df.to_csv('../data/CQA_J08_Kagome.csv')
-
-O_gs = CsnFourier.Groundstate(opt_YJM, opt_H)
-optimized_energy = CsnFourier.Expect_braket_energy(opt_YJM, opt_H)
-
-print('the optimized ground state: {}'.format(O_gs))
-print('------------------------------------')
-print('Optimized lowest energy: {}'.format(optimized_energy))
-print('-------------------------------------')
-print('True Ground State wavefuncion in Sn irrep basis: {}'.format(V_gs))
-print('-------------------------------------')
-print('The overlap between the optimized state and the ground state: {}'.format(jnp.dot(O_gs,
-                                                                               V_gs)))
-print('The distance between the optimized state and the ground state: {}'.format(jnp.linalg.norm(jnp.subtract(V_gs, O_gs))))
+#
+# J = CsnFourier.Expect_braket
+# opt_YJM, opt_H, opt_energy_list= CsnFourier.CSn_nadam(J, scale=float(1e-1))
+#
+# import pandas as pd
+#
+# df = pd.DataFrame(opt_energy_list)
+# df.to_csv('../data/CQA_J08_Kagome.csv')
+#
+# O_gs = CsnFourier.Groundstate(opt_YJM, opt_H)
+# optimized_energy = CsnFourier.Expect_braket_energy(opt_YJM, opt_H)
+#
+# print('the optimized ground state: {}'.format(O_gs))
+# print('------------------------------------')
+# print('Optimized lowest energy: {}'.format(optimized_energy))
+# print('-------------------------------------')
+# print('True Ground State wavefuncion in Sn irrep basis: {}'.format(V_gs))
+# print('-------------------------------------')
+# print('The overlap between the optimized state and the ground state: {}'.format(jnp.dot(O_gs,
+#                                                                                V_gs)))
+# print('The distance between the optimized state and the ground state: {}'.format(jnp.linalg.norm(jnp.subtract(V_gs, O_gs))))
