@@ -440,7 +440,7 @@ class CSnGradient(FourierFilters):
         pass
 
 
-    def CSn_nadam(self,J,  Params = None, delta1=float(0.99), delta2=float(0.9999), scale = float(1.0), mode = 'jax'):
+    def CSn_nadam(self,J,  Params = None, delta1=float(0.99), delta2=float(0.999), scale = float(1.0), mode = 'jax'):
 
         """
         Using Nadam to accelerate the gradient descent
@@ -536,7 +536,8 @@ class CSnGradient(FourierFilters):
                         jnp.add(jnp.multiply(delta1 , moment_h) , jnp.multiply(jnp.subtract(float(1) , delta1) ,grad_h )
                         / jnp.subtract(float(1) , jnp.power(delta2, (jnp.add(i , int(1)))))))
 
-
+            # loss_energy = self.Expect_braket_energy(YJMparams, Hparams)
+            # energy_list.append(loss_energy)
             if LOG and i % 5 == 0:
                 print('updated gradient squared: {}---{}'.format(squared_grad['YJM'].shape, squared_grad['H'].shape))
                 print('updated bia correction have the shape: {}--{}'.format(moment_squared_yjm.shape, moment_squared_h.shape))
@@ -552,6 +553,15 @@ class CSnGradient(FourierFilters):
 
 
         return YJMparams, Hparams, energy_list
+
+
+    def CQA_BFGS(self, J,  Params = None, scale=float(1e-1)):
+        if Params is None:
+            YJMparams, Hparams = self.random_params2(scale=scale)
+        else:
+            YJMparams = Params[0]
+            Hparams = Params[1]
+
 
 
 

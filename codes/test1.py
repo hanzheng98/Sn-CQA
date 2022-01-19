@@ -55,7 +55,7 @@ KetNet Kagomme Lattice
 '''
 
 
-J = [1, 0.5]
+J = [1, 0.8]
 # graph = nk.graph.Grid(extent= [2,4], pbc=False)
 # edges = graph.edges
 # nx.draw(graph.to_networkx(), with_labels=True, font_weight='bold')
@@ -122,7 +122,7 @@ Nsites = int( 12)
 
 
 CsnFourier = CSnGradient(J= J, lattice = lattice3, Nsites=Nsites,
-                    partit=partit,p=int(4), num_samples =int(1000), max_iter = int(5001), lr=5e-4)
+                    partit=partit,p=int(6), num_samples =int(1000), max_iter = int(5001), lr=2e-3)
 
 
 Ham_rep = CsnFourier.Ham_rep()
@@ -145,24 +145,35 @@ Sn-CQA Ansatze testing phase
 
 -----------------------------------------------------------------------------
 '''
-#
-# J = CsnFourier.Expect_braket
-# opt_YJM, opt_H, opt_energy_list= CsnFourier.CSn_nadam(J, scale=float(1e-1))
-#
-# import pandas as pd
-#
-# df = pd.DataFrame(opt_energy_list)
-# df.to_csv('../data/CQA_J08_Kagome.csv')
-#
-# O_gs = CsnFourier.Groundstate(opt_YJM, opt_H)
-# optimized_energy = CsnFourier.Expect_braket_energy(opt_YJM, opt_H)
-#
-# print('the optimized ground state: {}'.format(O_gs))
-# print('------------------------------------')
-# print('Optimized lowest energy: {}'.format(optimized_energy))
-# print('-------------------------------------')
-# print('True Ground State wavefuncion in Sn irrep basis: {}'.format(V_gs))
-# print('-------------------------------------')
-# print('The overlap between the optimized state and the ground state: {}'.format(jnp.dot(O_gs,
-#                                                                                V_gs)))
+
+J = CsnFourier.Expect_braket
+opt_YJM, opt_H, opt_energy_list= CsnFourier.CSn_nadam(J, scale=float(1e-1))
+
+import pandas as pd
+
+df = pd.DataFrame(opt_energy_list)
+df.to_csv('../data/CQA_J05_Kagome_t.csv')
+
+O_gs = CsnFourier.Groundstate(opt_YJM, opt_H)
+optimized_energy = CsnFourier.Expect_braket_energy(opt_YJM, opt_H)
+
+print('the optimized ground state: {}'.format(O_gs))
+print('------------------------------------')
+print('Optimized lowest energy: {}'.format(optimized_energy))
+print('-------------------------------------')
+print('True Ground State wavefuncion in Sn irrep basis: {}'.format(V_gs))
+print('-------------------------------------')
+print('The overlap between the optimized state and the ground state: {}'.format(jnp.dot(O_gs,
+                                                                               V_gs)))
 # print('The distance between the optimized state and the ground state: {}'.format(jnp.linalg.norm(jnp.subtract(V_gs, O_gs))))
+
+'''
+The best run for the J2 = 0.5 with learning rate self.rt = 1e-3 and num_samples = 5000 and the overlap with exact =  0.9521776
+
+(p=6) J2 = 0.5 with self.rt = 1e-3 and num_samples = 1000. The overlap with exact = 0.9852500
+
+
+The best run for the J2 = 0.8 with learning rate self.rt = 2e-3 and num_samples = 1000, with the overlap with the exact = 0.9964648
+
+(p=6) the best run for the J2=0.8 with learning rate self.rt = 2e-3 and num_samples = 1000, the overlap with exact = 0.9967997
+'''

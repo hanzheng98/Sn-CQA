@@ -167,4 +167,4 @@ print('True Ground State wavefuncion in Sn irrep basis: {}'.format(V_gs))
 print('-------------------------------------')
 print('The overlap between the optimized state and the ground state: {}'.format(jnp.dot(O_gs,
                                                                                V_gs)))
-print('The distance between the optimized state and the ground state: {}'.format(jnp.linalg.norm(jnp.subtract(V_gs, O_gs))))
+# print('The distance between the optimized state and the ground state: {}'.format(jnp.linalg.norm(jnp.subtract(V_gs, O_gs))))

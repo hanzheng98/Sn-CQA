@@ -6,6 +6,6 @@
 /.DS_Store
 /codes/.idea/
 /codes/__pycache__/
-
+/codes/PLOT.ipynb
 codes/test_frustrated .ipynb
  
