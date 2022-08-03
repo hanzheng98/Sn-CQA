@@ -31,6 +31,7 @@ class CSnGradient(FourierFilters):
         # trans_const = jnp.multiply(num_trans, jnp.ones(self.dim), dtype='complex128')
         self.num_trans = num_trans
         self.quantumnoise = quantumnoise
+        self.logging = {'energy': [], 'iteration': [], 'EDGstate': [], 'CQAGstate':[]}
 
 
 
@@ -278,23 +279,30 @@ class CSnGradient(FourierFilters):
         groundstate = self.CSn_VStates(YJMparams, Hparams)
         rep_H = self.Ham_rep().astype('float64')
         rep_H = jnp.asarray(rep_H)
-        if self.quantumnoise:
-            noise = jax.random.normal(random.PRNGKey(int(24)), jnp.shape(rep_H)) * scale
-            rep_H = noise + rep_H
+        # if self.quantumnoise:
+        #     noise = jax.random.normal(random.PRNGKey(int(24)), jnp.shape(rep_H)) * scale
+        #     rep_H = noise + rep_H
 
 
         rep_H += jnp.add(rep_H, jnp.multiply(self.num_trans, jnp.diag(jnp.ones(self.dim))))
         # make sure the Hamiltonian is positive-definite by adding scalar multiple of identitties
-        return jnp.matmul(jnp.conjugate(groundstate), jnp.matmul(rep_H, groundstate)) / jnp.linalg.norm(groundstate)
+        expectation = jnp.matmul(jnp.conjugate(groundstate), jnp.matmul(rep_H, groundstate)) / jnp.linalg.norm(groundstate)
+        self.logging['energy'].append(expectation)
+        return expectation
 
-    def Expect_braket_energy(self,YJMparams, Hparams):
+    def Expect_braket_energy(self,YJMparams, Hparams, scale=1e-3):
         # split = jnp.multiply(jnp.multiply(self.Nsites, self.Nsites), self.p)
         # YJMparams = jnp.reshape(Params.at[int(0):split].get(), newshape=(self.Nsites, self.Nsites, self.p))
         # Hparams = Params.at[split:int(-1)].get()
         groundstate = self.CSn_VStates(YJMparams, Hparams)
         rep_H = self.Ham_rep().astype('float64')
         rep_H = jnp.asarray(rep_H)
-        return jnp.matmul(jnp.conjugate(groundstate), jnp.matmul(rep_H, groundstate)) / jnp.linalg.norm(groundstate)
+        # if self.quantumnoise:
+        #     noise = jax.random.normal(random.PRNGKey(int(24)), jnp.shape(rep_H)) * scale
+        #     rep_H = noise + rep_H
+        expectation =jnp.matmul(jnp.conjugate(groundstate), jnp.matmul(rep_H, groundstate)) / jnp.linalg.norm(groundstate)
+        self.logging['energy'].append(expectation)
+        return expectation
 
 
 
@@ -549,9 +557,9 @@ class CSnGradient(FourierFilters):
                 print('updated bia correction have the shape: {}--{}'.format(moment_squared_yjm.shape, moment_squared_h.shape))
                 print('updated YJMparams, Hparams have the shape: {}, {}'.format(YJMparams.shape, Hparams.shape))
                 # loss = J(YJMparams, Hparams)
-                loss_energy = self.Expect_braket_energy(YJMparams, Hparams)
-                print('energy expectation at iteration {}: --- ({})'.format(i, loss_energy))
-                energy_list.append(loss_energy)
+                # loss_energy = J(YJMparams, Hparams)
+                print('energy expectation at iteration {}: --- ({})'.format(i, self.logging['energy'][-1]))
+                # energy_list.append(loss_energy)
                 # if loss < float(1e-6):
                 #     print('--------------------------------------------')
                 #     print('finding the optimized parameters for the energy expectation: {}'.format(loss))
