@@ -287,7 +287,7 @@ class CSnGradient(FourierFilters):
         rep_H += jnp.add(rep_H, jnp.multiply(self.num_trans, jnp.diag(jnp.ones(self.dim))))
         # make sure the Hamiltonian is positive-definite by adding scalar multiple of identitties
         expectation = jnp.matmul(jnp.conjugate(groundstate), jnp.matmul(rep_H, groundstate)) / jnp.linalg.norm(groundstate)
-        self.logging['energy'].append(expectation)
+        # self.logging['energy'].append(expectation)
         return expectation
 
     def Expect_braket_energy(self,YJMparams, Hparams, scale=1e-3):
@@ -301,7 +301,7 @@ class CSnGradient(FourierFilters):
         #     noise = jax.random.normal(random.PRNGKey(int(24)), jnp.shape(rep_H)) * scale
         #     rep_H = noise + rep_H
         expectation =jnp.matmul(jnp.conjugate(groundstate), jnp.matmul(rep_H, groundstate)) / jnp.linalg.norm(groundstate)
-        self.logging['energy'].append(expectation)
+        # self.logging['energy'].append(expectation)
         return expectation
 
 
@@ -552,18 +552,22 @@ class CSnGradient(FourierFilters):
 
             # loss_energy = self.Expect_braket_energy(YJMparams, Hparams)
             # energy_list.append(loss_energy)
-            if LOG and i % 5 == 0:
-                print('updated gradient squared: {}---{}'.format(squared_grad['YJM'].shape, squared_grad['H'].shape))
-                print('updated bia correction have the shape: {}--{}'.format(moment_squared_yjm.shape, moment_squared_h.shape))
-                print('updated YJMparams, Hparams have the shape: {}, {}'.format(YJMparams.shape, Hparams.shape))
-                # loss = J(YJMparams, Hparams)
-                # loss_energy = J(YJMparams, Hparams)
-                print('energy expectation at iteration {}: --- ({})'.format(i, self.logging['energy'][-1]))
-                # energy_list.append(loss_energy)
-                # if loss < float(1e-6):
-                #     print('--------------------------------------------')
-                #     print('finding the optimized parameters for the energy expectation: {}'.format(loss))
-                #     return YJMparams, Hparams
+            if LOG:
+                loss_energy = J(YJMparams, Hparams)
+                self.logging['energy'].append(loss_energy)
+                self.logging['iteration'].append(i)
+                if i % 20 ==0:
+                    print('updated gradient squared: {}---{}'.format(squared_grad['YJM'].shape, squared_grad['H'].shape))
+                    print('updated bia correction have the shape: {}--{}'.format(moment_squared_yjm.shape, moment_squared_h.shape))
+                    print('updated YJMparams, Hparams have the shape: {}, {}'.format(YJMparams.shape, Hparams.shape))
+                    # loss = J(YJMparams, Hparams)
+                    # loss_energy = J(YJMparams, Hparams)
+                    print('energy expectation at iteration {}: --- ({})'.format(i, self.logging['energy'][i]))
+                    # energy_list.append(loss_energy)
+                    # if loss < float(1e-6):
+                    #     print('--------------------------------------------')
+                    #     print('finding the optimized parameters for the energy expectation: {}'.format(loss))
+                    #     return YJMparams, Hparams
 
 
         return YJMparams, Hparams, energy_list
