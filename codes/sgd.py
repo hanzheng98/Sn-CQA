@@ -556,7 +556,7 @@ class CSnGradient(FourierFilters):
                 Hparams += noiseH
             # energy_list.append(loss_energy)
             if LOG:
-                loss_energy = J(YJMparams, Hparams)
+                loss_energy = self.Expect_braket_energy(YJMparams, Hparams)
                 self.logging['energy'].append(loss_energy)
                 self.logging['iteration'].append(i)
                 if i % 20 ==0:
