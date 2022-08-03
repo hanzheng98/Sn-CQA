@@ -21,7 +21,7 @@ class CSnGradient(FourierFilters):
 
     '''
 
-    def __init__(self, lr=float(2e-3), max_iter=int(1001), gamma=float(0.95), num_samples=None, **kwargs):
+    def __init__(self, lr=float(2e-3), max_iter=int(1001), gamma=float(0.95), num_samples=None, quantumnoise = False, **kwargs):
         super(CSnGradient, self).__init__(**kwargs)
         self.lr = lr
         self.max_iter = max_iter
@@ -30,6 +30,7 @@ class CSnGradient(FourierFilters):
         num_trans = jnp.add(len(self.lattice[0]), len(self.lattice[1]))
         # trans_const = jnp.multiply(num_trans, jnp.ones(self.dim), dtype='complex128')
         self.num_trans = num_trans
+        self.quantumnoise = quantumnoise
 
 
 
@@ -273,10 +274,15 @@ class CSnGradient(FourierFilters):
     ------------------------------------------------------------------------------------------------------
     '''
 
-    def Expect_braket(self, YJMparams, Hparams):
+    def Expect_braket(self, YJMparams, Hparams, scale = 1e-3):
         groundstate = self.CSn_VStates(YJMparams, Hparams)
         rep_H = self.Ham_rep().astype('float64')
         rep_H = jnp.asarray(rep_H)
+        if self.quantumnoise:
+            noise = jax.random.normal(random.PRNGKey(int(24)), jnp.shape(rep_H)) * scale
+            rep_H = noise + rep_H
+
+
         rep_H += jnp.add(rep_H, jnp.multiply(self.num_trans, jnp.diag(jnp.ones(self.dim))))
         # make sure the Hamiltonian is positive-definite by adding scalar multiple of identitties
         return jnp.matmul(jnp.conjugate(groundstate), jnp.matmul(rep_H, groundstate)) / jnp.linalg.norm(groundstate)
