@@ -178,7 +178,10 @@ print('The overlap between the optimized state and the ground state: {}'.format(
 
 import pandas as pd
 import datetime
+import os
+
 snapshotdate = datetime.datetime.now().strftime('%m-%d_%H-%M')
+os.makedirs('../data/' + snapshotdate + '/')
 df = pd.DataFrame.from_dict(CsnFourier.logging )
 df.to_csv('../data/'+ snapshotdate +  '/CQA_J05_6square_loss.csv')
 df2 = pd.DataFrame.from_dict(logging2)
