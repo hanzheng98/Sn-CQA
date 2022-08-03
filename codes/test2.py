@@ -130,7 +130,7 @@ Nsites = int( 12)
 
 
 CsnFourier = CSnGradient(J= J, lattice = lattice4, Nsites=Nsites,
-                    partit=partit,p=int(4), num_samples =int(1000), max_iter = int(5001), lr=1e-3)
+                    partit=partit,p=int(4), num_samples =int(1000), max_iter = int(201), lr=1e-3)
 
 
 Ham_rep = CsnFourier.Ham_rep()
