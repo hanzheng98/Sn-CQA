@@ -517,6 +517,13 @@ class CSnGradient(FourierFilters):
             # Gradient w.r.t. argumnet index 2 i.e., Hparams
             grad_h = grad_H(YJMparams, Hparams)
 
+            if self.quantumnoise:
+                noiseYJM = jax.random.normal(random.PRNGKey(int(24)), jnp.shape(YJMparams)) * (scale)
+                noiseH =jax.random.normal(random.PRNGKey(int(23)), jnp.shape(Hparams)) * (scale )
+                grad_yjm += noiseYJM
+                grad_h += noiseH
+
+
             # Momements update
             params_v['YJM'] = jnp.add(jnp.multiply(delta1 , params_v['YJM']) ,
                                       jnp.multiply(jnp.subtract(float(1.0) , delta1) , grad_yjm ))
@@ -549,11 +556,7 @@ class CSnGradient(FourierFilters):
             Hparams -= jnp.multiply((self.lr / jnp.add(jnp.sqrt(moment_squared_h) , e)) ,
                         jnp.add(jnp.multiply(delta1 , moment_h) , jnp.multiply(jnp.subtract(float(1) , delta1) ,grad_h )
                         / jnp.subtract(float(1) , jnp.power(delta2, (jnp.add(i , int(1)))))))
-            if self.quantumnoise:
-                noiseYJM = jax.random.normal(random.PRNGKey(int(24)), jnp.shape(YJMparams)) * (scale* 1e-2)
-                noiseH =jax.random.normal(random.PRNGKey(int(23)), jnp.shape(Hparams)) * (scale* 1e-2)
-                YJMparams += noiseYJM
-                Hparams += noiseH
+
             # energy_list.append(loss_energy)
             if LOG:
                 loss_energy = self.Expect_braket_energy(YJMparams, Hparams)
