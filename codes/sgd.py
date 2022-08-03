@@ -31,7 +31,7 @@ class CSnGradient(FourierFilters):
         # trans_const = jnp.multiply(num_trans, jnp.ones(self.dim), dtype='complex128')
         self.num_trans = num_trans
         self.quantumnoise = quantumnoise
-        self.logging = {}
+        self.logging = {'energy': [], 'iteration':[]}
 
 
 
