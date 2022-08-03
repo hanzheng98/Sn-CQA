@@ -160,10 +160,11 @@ opt_YJM, opt_H = CsnFourier.CSn_nadam(J, scale=float(1e-2))
 
 O_gs = CsnFourier.Groundstate(opt_YJM, opt_H)
 optimized_energy = CsnFourier.Expect_braket_energy(opt_YJM, opt_H)
-CsnFourier.logging['EDGstate'] = np.asarray(V_gs)
-CsnFourier.logging['CQAGstate'] = np.asarray(O_gs)
-CsnFourier.logging['overlap'] = np.dot(np.array(V_gs), np.array(O_gs))
-CsnFourier.logging['precision'] = np.abs(E_gs - np.asarray(optimized_energy)) / np.abs(E_gs)
+logging2 = {}
+logging2['EDGstate'] = np.asarray(V_gs)
+logging2['CQAGstate'] = np.asarray(O_gs)
+# CsnFourier.logging['overlap'] = np.dot(np.array(V_gs), np.array(O_gs))
+# CsnFourier.logging['precision'] = np.abs(E_gs - np.asarray(optimized_energy)) / np.abs(E_gs)
 
 print('the optimized ground state: {}'.format(O_gs))
 print('------------------------------------')
@@ -179,7 +180,9 @@ import pandas as pd
 import datetime
 snapshotdate = datetime.datetime.now().strftime('%m-%d_%H-%M')
 df = pd.DataFrame.from_dict(CsnFourier.logging )
-df.to_csv('../data/'+ snapshotdate +  '/CQA_J08_6square2.csv')
+df.to_csv('../data/'+ snapshotdate +  '/CQA_J05_6square_loss.csv')
+df2 = pd.DataFrame.from_dict(logging2)
+df2.to_csv('../data/'+ snapshotdate +  '/CQA_J05_6square_states.csv')
 # print('The distance between the optimized state and the ground state: {}'.format(jnp.linalg.norm(jnp.subtract(V_gs, O_gs))))
 
 """
