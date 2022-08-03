@@ -155,15 +155,15 @@ Sn-CQA Ansatze testing phase
 '''
 
 J = CsnFourier.Expect_braket
-opt_YJM, opt_H, opt_energy_list= CsnFourier.CSn_nadam(J, scale=float(1e-1))
+opt_YJM, opt_H = CsnFourier.CSn_nadam(J, scale=float(1e-2))
 
-import pandas as pd
-
-df = pd.DataFrame(opt_energy_list)
-df.to_csv('../data/CQA_J08_6square2.csv')
 
 O_gs = CsnFourier.Groundstate(opt_YJM, opt_H)
 optimized_energy = CsnFourier.Expect_braket_energy(opt_YJM, opt_H)
+CsnFourier.logging['EDGstate'] = np.asarray(V_gs)
+CsnFourier.logging['CQAGstate'] = np.asarray(O_gs)
+CsnFourier.logging['overlap'] = np.dot(np.array(V_gs), np.array(O_gs))
+CsnFourier.logging['precision'] = np.abs(E_gs - np.asarray(optimized_energy)) / np.abs(E_gs)
 
 print('the optimized ground state: {}'.format(O_gs))
 print('------------------------------------')
@@ -173,6 +173,13 @@ print('True Ground State wavefuncion in Sn irrep basis: {}'.format(V_gs))
 print('-------------------------------------')
 print('The overlap between the optimized state and the ground state: {}'.format(jnp.dot(O_gs,
                                                                                V_gs)))
+
+
+import pandas as pd
+import datetime
+snapshotdate = datetime.datetime.now().strftime('%m-%d_%H-%M')
+df = pd.DataFrame.from_dict(CsnFourier.logging )
+df.to_csv('../data/'+ snapshotdate +  '/CQA_J08_6square2.csv')
 # print('The distance between the optimized state and the ground state: {}'.format(jnp.linalg.norm(jnp.subtract(V_gs, O_gs))))
 
 """

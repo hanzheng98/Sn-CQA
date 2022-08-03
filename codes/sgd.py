@@ -31,7 +31,7 @@ class CSnGradient(FourierFilters):
         # trans_const = jnp.multiply(num_trans, jnp.ones(self.dim), dtype='complex128')
         self.num_trans = num_trans
         self.quantumnoise = quantumnoise
-        self.logging = {'energy': [], 'iteration': [], 'EDGstate': [], 'CQAGstate':[]}
+        self.logging = {}
 
 
 
@@ -454,7 +454,7 @@ class CSnGradient(FourierFilters):
         pass
 
 
-    def CSn_nadam(self,J,  Params = None, delta1=float(0.99), delta2=float(0.999), scale = float(1.0), mode = 'jax'):
+    def CSn_nadam(self,J,  Params = None, delta1=float(0.99), delta2=float(0.999), scale = float(1e-2), mode = 'jax'):
 
         """
         Using Nadam to accelerate the gradient descent
@@ -510,7 +510,6 @@ class CSnGradient(FourierFilters):
         # Run once to compile JIT (Just In Time). The next uses of grad_yjm and grad_h will now be fast
         grad_YJM(YJMparams, Hparams)
         grad_H(YJMparams, Hparams)
-        energy_list = []
         for i in range(self.max_iter):
             # Gradient w.r.t. argumnet index 1 i.e., YJMparams
             grad_yjm= grad_YJM(YJMparams, Hparams)
@@ -541,6 +540,7 @@ class CSnGradient(FourierFilters):
             moment_squared_h = squared_grad['H'] / jnp.subtract(float(1.0) , jnp.power(delta2, (jnp.add(i , int(1)))))
 
             # Parameter update
+
             YJMparams -= jnp.multiply((self.lr / jnp.add(jnp.sqrt(moment_squared_yjm) , e)) ,
                         jnp.add(jnp.multiply(delta1 , moment_yjm) , jnp.multiply(jnp.subtract(float(1) , delta1) ,grad_yjm )
                         / jnp.subtract(float(1) , jnp.power(delta2, (jnp.add(i , int(1)))))))
@@ -549,8 +549,11 @@ class CSnGradient(FourierFilters):
             Hparams -= jnp.multiply((self.lr / jnp.add(jnp.sqrt(moment_squared_h) , e)) ,
                         jnp.add(jnp.multiply(delta1 , moment_h) , jnp.multiply(jnp.subtract(float(1) , delta1) ,grad_h )
                         / jnp.subtract(float(1) , jnp.power(delta2, (jnp.add(i , int(1)))))))
-
-            # loss_energy = self.Expect_braket_energy(YJMparams, Hparams)
+            if self.quantumnoise:
+                noiseYJM = jax.random.normal(random.PRNGKey(int(24)), jnp.shape(YJMparams)) * (scale* 1e-2)
+                noiseH =jax.random.normal(random.PRNGKey(int(23)), jnp.shape(Hparams)) * (scale* 1e-2)
+                YJMparams += noiseYJM
+                Hparams += noiseH
             # energy_list.append(loss_energy)
             if LOG:
                 loss_energy = J(YJMparams, Hparams)
@@ -570,7 +573,7 @@ class CSnGradient(FourierFilters):
                     #     return YJMparams, Hparams
 
 
-        return YJMparams, Hparams, energy_list
+        return YJMparams, Hparams
 
 
     def CQA_BFGS(self, J,  Params = None, scale=float(1e-1)):
