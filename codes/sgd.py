@@ -11,6 +11,9 @@ from jax import grad, jit, vmap
 # import tensorflow_quatum as tfq
 from jax import custom_jvp
 import optax
+import pandas as pd
+import datetime
+import os
 
 class CSnGradient(FourierFilters):
     '''
@@ -22,7 +25,7 @@ class CSnGradient(FourierFilters):
 
     '''
 
-    def __init__(self, lr=float(2e-3), max_iter=int(1001), gamma=float(0.95), num_samples=None, quantumnoise = False, **kwargs):
+    def __init__(self, lr=float(2e-3), max_iter=int(1001), gamma=float(0.95), num_samples=None, quantumnoise = True ,**kwargs):
         super(CSnGradient, self).__init__(**kwargs)
         self.lr = lr
         self.max_iter = max_iter
@@ -33,6 +36,7 @@ class CSnGradient(FourierFilters):
         self.num_trans = num_trans
         self.quantumnoise = quantumnoise
         self.logging = {'energy': [], 'iteration':[]}
+        self.logging2 = {'CQAGstate': [], 'iteration':[]}
 
 
 
@@ -297,6 +301,8 @@ class CSnGradient(FourierFilters):
     ------------------------------------------------------------------------------------------------------
     '''
 
+
+
     def Expect_braket(self, YJMparams, Hparams, scale = 1e-3):
         groundstate = self.CSn_VStates(YJMparams, Hparams)
         rep_H = self.Ham_rep().astype('float64')
@@ -311,6 +317,22 @@ class CSnGradient(FourierFilters):
         expectation = jnp.matmul(jnp.conjugate(groundstate), jnp.matmul(rep_H, groundstate)) / jnp.linalg.norm(groundstate)
         # self.logging['energy'].append(expectation)
         return expectation
+
+    def Expect_braket_energy_natural(self, Params):
+        split = jnp.multiply(jnp.multiply(self.Nsites, self.Nsites), self.p)
+        YJMparams = jnp.reshape(Params.at[int(0):split].get(), newshape=(self.Nsites, self.Nsites, self.p))
+        Hparams = Params.at[split:int(-1)].get()
+        groundstate = self.CSn_VStates(YJMparams, Hparams)
+        rep_H = self.Ham_rep().astype('float64')
+        rep_H = jnp.asarray(rep_H)
+        # if self.quantumnoise:
+        #     noise = jax.random.normal(random.PRNGKey(int(24)), jnp.shape(rep_H)) * scale
+        #     rep_H = noise + rep_H
+        expectation = jnp.matmul(jnp.conjugate(groundstate), jnp.matmul(rep_H, groundstate)) / jnp.linalg.norm(
+            groundstate)
+        # self.logging['energy'].append(expectation)
+        return expectation
+
 
     def Expect_braket_energy(self,YJMparams, Hparams, scale=1e-3):
         # split = jnp.multiply(jnp.multiply(self.Nsites, self.Nsites), self.p)
@@ -472,20 +494,91 @@ class CSnGradient(FourierFilters):
 
 
 
-    # def CSn_natural(self, J , scale = float(1e-2)):
-    #     '''
-    #     Use natural gradient descent here
-    #
-    #     :param J:
-    #     :param scale:
-    #     :return:
-    #     '''
-    #
-    #     LOG = True
-    #     Params = self.random_params(scale=scale)
-    #     csn_states = self.CSn_VStates_nat(Params)
-    #
-    #     # ----- Calculating the Fubini-Study metric
+    def CSn_natural(self, L , scale = float(1e-2)):
+        '''
+        Use natural gradient descent here
+
+        :param J:
+        :param scale:
+        :return:
+        '''
+
+        LOG = True
+        Params = self.random_params(scale=scale)
+        csn_states_dff = jax.crev(self.CSn_VStates)
+
+
+        # ----- Calculating the Fubini-Study metric
+        G = lambda params: jnp.matmul(jnp.transpose(csn_states_dff(params), [0,1]),csn_states_dff(params)) - \
+                           jnp.kron(jnp.dot(jnp.transpose(csn_states_dff(params), [0,1]), self.CSn_VStates_nat(params)),
+                                jnp.dot(self.CSn_VStates_nat(params), csn_states_dff(params)))
+
+        G_inv = lambda params: jnp.linalg.inv(G(params))
+
+        # Gradient descent step
+        # Define the gradient function w.r.t yjm and b
+        grad_params = jax.jit(jax.grad(L,
+                                    argnums=int(0)))  # argnums indicates which variable to differentiate with from the parameters list passed to the function
+
+
+        # Run once to compile JIT (Just In Time). The next uses of grad_yjm and grad_h will now be fast
+        grad_params(Params)
+
+        for i in range(self.max_iter):
+            # Gradient w.r.t. argumnet index 1 i.e., w
+            #             grad_yjm = grad_YJM(YJMparams, Hparams)
+
+
+            # Gradient w.r.t. argumnet index 2 i.e., b
+            grad= grad_params(Params)
+            Fisher_inv = G_inv(Params)
+            if self.quantumnoise:
+                Params -= self.lr * jnp.matmul(Fisher_inv,
+                                    grad)
+                noise = jax.random.normal(random.PRNGKey(int(24)), Params.shape) * (scale)
+                Params += noise
+            else:
+                Params -= self.lr * jnp.matmul(G_inv(Params),
+                                               grad)
+            if LOG and i % 20 ==0:
+                loss_energy = L(Params)
+                cqa_states = self.CSn_VStates_nat(Params)
+                self.logging2['CQAGstate'].append(cqa_states)
+                self.logging2['iteration'].append(i)
+                self.logging['energy'].append(loss_energy)
+                self.logging['iteration'].append(i)
+                print(
+                    'updated inverse fisher information matrix: {}'.format(Fisher_inv.shape))
+                print('updated gradients:{}'.format(grad.shape))
+
+                print('updated parameters'.format(Params.shape))
+                # loss = J(YJMparams, Hparams)
+                # loss_energy = J(YJMparams, Hparams)
+                print('energy expectation at iteration {}: --- ({})'.format(i, self.logging['energy'][i]))
+                # energy_list.append(loss_energy)
+                # if loss < float(1e-6):
+                #     print('--------------------------------------------')
+                #     print('finding the optimized parameters for the energy expectation: {}'.format(loss))
+                #     return YJMparams, Hparams
+
+
+        snapshotdate = datetime.datetime.now().strftime('%m-%d_%H-%M')
+        os.makedirs('../data/' + snapshotdate + '/')
+        df = pd.DataFrame.from_dict(self.logging)
+        df.to_csv('../data/' + snapshotdate + '/CQA_J{}_6square_loss.csv'.format(self.J[1]))
+        df2 = pd.DataFrame.from_dict(self.logging2)
+        df2.to_csv('../data/' + snapshotdate + '/CQA_J{}_6square_states.csv'.format(self.J[1]))
+        best_index = jnp.argmax(jnp.asarray(self.logging['energy']))
+
+        return self.logging['energy'][best_index], self.logging2['CQAGstate'][best_index]
+
+
+
+
+
+
+
+
 
 
 
@@ -596,25 +689,35 @@ class CSnGradient(FourierFilters):
                         / jnp.subtract(float(1) , jnp.power(delta2, (jnp.add(i , int(1)))))))
 
             # energy_list.append(loss_energy)
-            if LOG:
+            if LOG and i %20 ==0:
                 loss_energy = self.Expect_braket_energy(YJMparams, Hparams)
+                cqa_state = self.CSn_VStates(YJMparams, Hparams)
+                self.logging2['CQAGstate'].append(cqa_state)
+                self.logging2['iteration'].append(i)
                 self.logging['energy'].append(loss_energy)
                 self.logging['iteration'].append(i)
-                if i % 50 ==0:
-                    print('updated gradient squared: {}---{}'.format(squared_grad['YJM'].shape, squared_grad['H'].shape))
-                    print('updated bia correction have the shape: {}--{}'.format(moment_squared_yjm.shape, moment_squared_h.shape))
-                    print('updated YJMparams, Hparams have the shape: {}, {}'.format(YJMparams.shape, Hparams.shape))
-                    # loss = J(YJMparams, Hparams)
-                    # loss_energy = J(YJMparams, Hparams)
-                    print('energy expectation at iteration {}: --- ({})'.format(i, self.logging['energy'][i]))
-                    # energy_list.append(loss_energy)
-                    # if loss < float(1e-6):
-                    #     print('--------------------------------------------')
-                    #     print('finding the optimized parameters for the energy expectation: {}'.format(loss))
-                    #     return YJMparams, Hparams
+                print('updated gradient squared: {}---{}'.format(squared_grad['YJM'].shape, squared_grad['H'].shape))
+                print('updated bia correction have the shape: {}--{}'.format(moment_squared_yjm.shape, moment_squared_h.shape))
+                print('updated YJMparams, Hparams have the shape: {}, {}'.format(YJMparams.shape, Hparams.shape))
+                # loss = J(YJMparams, Hparams)
+                # loss_energy = J(YJMparams, Hparams)
+                print('energy expectation at iteration {}: --- ({})'.format(i, self.logging['energy'][i]))
+                # energy_list.append(loss_energy)
+                # if loss < float(1e-6):
+                #     print('--------------------------------------------')
+                #     print('finding the optimized parameters for the energy expectation: {}'.format(loss))
+                #     return YJMparams, Hparams
 
+        snapshotdate = datetime.datetime.now().strftime('%m-%d_%H-%M')
+        os.makedirs('../data/' + snapshotdate + '/')
+        df = pd.DataFrame.from_dict(self.logging)
+        df.to_csv('../data/' + snapshotdate + '/CQA_J{}_6square_loss.csv'.format(self.J[1]))
+        df2 = pd.DataFrame.from_dict(self.logging2)
+        df2.to_csv('../data/' + snapshotdate + '/CQA_J{}_6square_states.csv'.format(self.J[1]))
 
-        return YJMparams, Hparams
+        best_index = jnp.argmax(jnp.asarray(self.logging['energy']))
+
+        return self.logging['energy'][best_index], self.logging2['CQAGstate'][best_index]
 
 
     def CQA_BFGS(self, J,  Params = None, scale=float(1e-1)):

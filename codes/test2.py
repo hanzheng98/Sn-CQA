@@ -48,9 +48,9 @@ from jax import random
 '''
 ------------------------------------------------------
 
-KetNet 3 x 4 Rectangular lattices 
+KetNet 3 x 4 Rectangular lattices
 
------------------------------------------------------ 
+-----------------------------------------------------
 
 '''
 
@@ -105,7 +105,7 @@ print('The exact ground-state energy from computational basis for J2 = {} is-- (
 '''
 ----------------------------------------------------------
 
-test on 3 x 4 squares  
+test on 3 x 4 squares
 
 ---------------------------------------------------------
 '''
@@ -130,7 +130,7 @@ Nsites = int( 12)
 
 
 CsnFourier = CSnGradient(J= J, lattice = lattice4, Nsites=Nsites,
-                    partit=partit,p=int(4), num_samples =int(1000), max_iter = int(201), lr=1e-3)
+                    partit=partit,p=int(4), num_samples =int(1000), max_iter = int(5001), lr=1e-3)
 
 
 Ham_rep = CsnFourier.Ham_rep()
@@ -149,17 +149,19 @@ print('Irrep Dims for {}: --- {}'.format(partit, CsnFourier.dim))
 '''
 -----------------------------------------------------------------------------
 
-Sn-CQA Ansatze testing phase 
+Sn-CQA Ansatze testing phase
 
 -----------------------------------------------------------------------------
 '''
 
-J = CsnFourier.Expect_braket
-opt_YJM, opt_H = CsnFourier.CSn_nadam(J, scale=float(1e-2))
+L = CsnFourier.Expect_braket
+# opt_YJM, opt_H = CsnFourier.CSn_nadam(L, scale=float(1e-2))
+optimized_energy, O_gs= CsnFourier.CSn_nadam(L, scale=float(1e-2))
 
 
-O_gs = CsnFourier.Groundstate(opt_YJM, opt_H)
-optimized_energy = CsnFourier.Expect_braket_energy(opt_YJM, opt_H)
+
+# O_gs = CsnFourier.Groundstate(opt_YJM, opt_H)
+# optimized_energy = CsnFourier.Expect_braket_energy(opt_YJM, opt_H)
 logging2 = {}
 logging2['EDGstate'] = np.asarray(V_gs)
 logging2['CQAGstate'] = np.asarray(O_gs)
@@ -176,23 +178,23 @@ print('The overlap between the optimized state and the ground state: {}'.format(
                                                                                V_gs)))
 
 
-import pandas as pd
-import datetime
-import os
-
-snapshotdate = datetime.datetime.now().strftime('%m-%d_%H-%M')
-os.makedirs('../data/' + snapshotdate + '/')
-df = pd.DataFrame.from_dict(CsnFourier.logging )
-df.to_csv('../data/'+ snapshotdate +  '/CQA_J05_6square_loss.csv')
-df2 = pd.DataFrame.from_dict(logging2)
-df2.to_csv('../data/'+ snapshotdate +  '/CQA_J05_6square_states.csv')
+# import pandas as pd
+# import datetime
+# import os
+#
+# snapshotdate = datetime.datetime.now().strftime('%m-%d_%H-%M')
+# os.makedirs('../data/' + snapshotdate + '/')
+# df = pd.DataFrame.from_dict(CsnFourier.logging )
+# df.to_csv('../data/'+ snapshotdate +  '/CQA_J{}_6square_loss.csv'.format(J[1]))
+# df2 = pd.DataFrame.from_dict(logging2)
+# df2.to_csv('../data/'+ snapshotdate +  '/CQA_J{}_6square_states.csv'.format(J[1]))
 # print('The distance between the optimized state and the ground state: {}'.format(jnp.linalg.norm(jnp.subtract(V_gs, O_gs))))
 
 """
 J2 = 0.5
 The best run with n_samples = 1000, learning rates = 0.002, p = 4, with the overlap = 0.9973676
 
-J2 = 0.8 
+J2 = 0.8
 
 The best run with n_samples = 1000, learning rates = 0.001, p=4, with the overlap = 0.9996319. saved in CQA_J08_6squares2.csv
 
