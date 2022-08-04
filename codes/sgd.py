@@ -505,7 +505,7 @@ class CSnGradient(FourierFilters):
 
         LOG = True
         Params = self.random_params(scale=scale)
-        csn_states_dff = jax.crev(self.CSn_VStates)
+        csn_states_dff = jax.jacrev(self.CSn_VStates)
 
 
         # ----- Calculating the Fubini-Study metric
@@ -554,7 +554,7 @@ class CSnGradient(FourierFilters):
                 print('updated parameters'.format(Params.shape))
                 # loss = J(YJMparams, Hparams)
                 # loss_energy = J(YJMparams, Hparams)
-                print('energy expectation at iteration {}: --- ({})'.format(i, self.logging['energy'][i]))
+                print('energy expectation at iteration {}: --- ({})'.format(i, self.logging['energy'][-1]))
                 # energy_list.append(loss_energy)
                 # if loss < float(1e-6):
                 #     print('--------------------------------------------')
@@ -568,7 +568,7 @@ class CSnGradient(FourierFilters):
         df.to_csv('../data/' + snapshotdate + '/CQA_J{}_6square_loss.csv'.format(self.J[1]))
         df2 = pd.DataFrame.from_dict(self.logging2)
         df2.to_csv('../data/' + snapshotdate + '/CQA_J{}_6square_states.csv'.format(self.J[1]))
-        best_index = jnp.argmax(jnp.asarray(self.logging['energy']))
+        best_index = jnp.argmin(jnp.asarray(self.logging['energy']))
 
         return self.logging['energy'][best_index], self.logging2['CQAGstate'][best_index]
 
@@ -585,7 +585,7 @@ class CSnGradient(FourierFilters):
 
 
 
-    def CSn_nadam(self,J,  Params = None, delta1=float(0.99), delta2=float(0.999), scale = float(1e-2), mode = 'jax'):
+    def CSn_nadam(self,J, latticetype, Params = None, delta1=float(0.99), delta2=float(0.999), scale = float(1e-2), use_hessian = False):
 
         """
         Using Nadam to accelerate the gradient descent
@@ -654,39 +654,56 @@ class CSnGradient(FourierFilters):
                 grad_yjm += noiseYJM
                 grad_h += noiseH
 
+            if use_hessian:
+                YJMHessian = jax.jit(jax.jacfwd(jax.jacrev(lambda yjmparams: J(yjmparams, Hparams))))
+                HamHessian = jax.jit(jax.jacfwd(jax.jacrev(lambda hparams: J(YJMparams, hparams))))
+                yjmHessian = YJMHessian(YJMparams)
+                print('--shape of the YJM Hessian---{}'.format(yjmHessian.shape))
+                hamHessian = HamHessian(Hparams)
+                print('--shape of the Hamitonian Hessian--- {}'.format(hamHessian.shape))
+                YJMparams -= jnp.reshape(jnp.matmul(jnp.linalg.inv(jnp.reshape(yjmHessian,
+                                                    (self.Nsites**2 * self.p, self.Nsites**2 * self.p))),
+                                                    jnp.reshape(grad_yjm, (self.Nsites**2 * self.p))), YJMparams.shape)
 
-            # Momements update
-            params_v['YJM'] = jnp.add(jnp.multiply(delta1 , params_v['YJM']) ,
-                                      jnp.multiply(jnp.subtract(float(1.0) , delta1) , grad_yjm ))
+                Hparams -= jnp.matmul(jnp.linalg.inv(hamHessian), grad_h)
+            else:
+                # Momements update
+                params_v['YJM'] = jnp.add(jnp.multiply(delta1 , params_v['YJM']) ,
+                                          jnp.multiply(jnp.subtract(float(1.0) , delta1) , grad_yjm ))
 
-            params_v['H'] = jnp.add(jnp.multiply(delta1 , params_v['H']) ,
-                                      jnp.multiply(jnp.subtract(float(1.0) , delta1) , grad_h ))
+                params_v['H'] = jnp.add(jnp.multiply(delta1 , params_v['H']) ,
+                                          jnp.multiply(jnp.subtract(float(1.0) , delta1) , grad_h ))
 
-            squared_grad['YJM'] = jnp.add(jnp.multiply(delta2 , squared_grad['YJM'] ),
-                                          jnp.multiply(jnp.subtract(float(1.0), delta2) ,
-                                                       (jnp.multiply(grad_yjm , grad_yjm))))
+                squared_grad['YJM'] = jnp.add(jnp.multiply(delta2 , squared_grad['YJM'] ),
+                                              jnp.multiply(jnp.subtract(float(1.0), delta2) ,
+                                                           (jnp.multiply(grad_yjm , grad_yjm))))
 
-            squared_grad['H'] =jnp.add(jnp.multiply(delta2 , squared_grad['H'] ),
-                                          jnp.multiply(jnp.subtract(float(1.0), delta2) ,
-                                                       (jnp.multiply(grad_h , grad_h))))
+                squared_grad['H'] =jnp.add(jnp.multiply(delta2 , squared_grad['H'] ),
+                                              jnp.multiply(jnp.subtract(float(1.0), delta2) ,
+                                                           (jnp.multiply(grad_h , grad_h))))
 
-            # Bias correction
-            moment_yjm = params_v['YJM'] / jnp.subtract(float(1.0) , jnp.power(delta1, (jnp.add(i , int(1)))))
-            moment_h= params_v['H'] / jnp.subtract(float(1.0) , jnp.power(delta1, (jnp.add(i , int(1)))))
+                # Bias correction
+                moment_yjm = params_v['YJM'] / jnp.subtract(float(1.0) , jnp.power(delta1, (jnp.add(i , int(1)))))
+                moment_h= params_v['H'] / jnp.subtract(float(1.0) , jnp.power(delta1, (jnp.add(i , int(1)))))
 
-            moment_squared_yjm = squared_grad['YJM'] / jnp.subtract(float(1.0) , jnp.power(delta2, (jnp.add(i , int(1)))))
-            moment_squared_h = squared_grad['H'] / jnp.subtract(float(1.0) , jnp.power(delta2, (jnp.add(i , int(1)))))
+                moment_squared_yjm = squared_grad['YJM'] / jnp.subtract(float(1.0) , jnp.power(delta2, (jnp.add(i , int(1)))))
+                moment_squared_h = squared_grad['H'] / jnp.subtract(float(1.0) , jnp.power(delta2, (jnp.add(i , int(1)))))
 
-            # Parameter update
+                # Parameter update
 
-            YJMparams -= jnp.multiply((self.lr / jnp.add(jnp.sqrt(moment_squared_yjm) , e)) ,
-                        jnp.add(jnp.multiply(delta1 , moment_yjm) , jnp.multiply(jnp.subtract(float(1) , delta1) ,grad_yjm )
-                        / jnp.subtract(float(1) , jnp.power(delta2, (jnp.add(i , int(1)))))))
+                YJMparams -= jnp.multiply((self.lr / jnp.add(jnp.sqrt(moment_squared_yjm) , e)) ,
+                            jnp.add(jnp.multiply(delta1 , moment_yjm) , jnp.multiply(jnp.subtract(float(1) , delta1) ,grad_yjm )
+                            / jnp.subtract(float(1) , jnp.power(delta2, (jnp.add(i , int(1)))))))
 
 
-            Hparams -= jnp.multiply((self.lr / jnp.add(jnp.sqrt(moment_squared_h) , e)) ,
-                        jnp.add(jnp.multiply(delta1 , moment_h) , jnp.multiply(jnp.subtract(float(1) , delta1) ,grad_h )
-                        / jnp.subtract(float(1) , jnp.power(delta2, (jnp.add(i , int(1)))))))
+                Hparams -= jnp.multiply((self.lr / jnp.add(jnp.sqrt(moment_squared_h) , e)) ,
+                            jnp.add(jnp.multiply(delta1 , moment_h) , jnp.multiply(jnp.subtract(float(1) , delta1) ,grad_h )
+                            / jnp.subtract(float(1) , jnp.power(delta2, (jnp.add(i , int(1)))))))
+
+                # print('updated gradient squared: {}---{}'.format(squared_grad['YJM'].shape, squared_grad['H'].shape))
+                # print('updated bia correction have the shape: {}--{}'.format(moment_squared_yjm.shape,
+                #                                                              moment_squared_h.shape))
+
 
             # energy_list.append(loss_energy)
             if LOG and i %20 ==0:
@@ -696,12 +713,11 @@ class CSnGradient(FourierFilters):
                 self.logging2['iteration'].append(i)
                 self.logging['energy'].append(loss_energy)
                 self.logging['iteration'].append(i)
-                print('updated gradient squared: {}---{}'.format(squared_grad['YJM'].shape, squared_grad['H'].shape))
-                print('updated bia correction have the shape: {}--{}'.format(moment_squared_yjm.shape, moment_squared_h.shape))
+
                 print('updated YJMparams, Hparams have the shape: {}, {}'.format(YJMparams.shape, Hparams.shape))
                 # loss = J(YJMparams, Hparams)
                 # loss_energy = J(YJMparams, Hparams)
-                print('energy expectation at iteration {}: --- ({})'.format(i, self.logging['energy'][i]))
+                print('energy expectation at iteration {}: --- ({})'.format(i, self.logging['energy'][-1]))
                 # energy_list.append(loss_energy)
                 # if loss < float(1e-6):
                 #     print('--------------------------------------------')
@@ -709,13 +725,13 @@ class CSnGradient(FourierFilters):
                 #     return YJMparams, Hparams
 
         snapshotdate = datetime.datetime.now().strftime('%m-%d_%H-%M')
-        os.makedirs('../data/' + snapshotdate + '/')
+        os.makedirs('../data/' + latticetype + '/'+  snapshotdate + '/')
         df = pd.DataFrame.from_dict(self.logging)
-        df.to_csv('../data/' + snapshotdate + '/CQA_J{}_6square_loss.csv'.format(self.J[1]))
+        df.to_csv('../data/'  + latticetype + '/' + snapshotdate + '/CQA_J{}_lr{}'.format(self.J[1], self.lr))
         df2 = pd.DataFrame.from_dict(self.logging2)
-        df2.to_csv('../data/' + snapshotdate + '/CQA_J{}_6square_states.csv'.format(self.J[1]))
+        df2.to_csv('../data/' + latticetype + '/' + snapshotdate + '/CQA_J{}_lr{}'.format(self.J[1], self.lr))
 
-        best_index = jnp.argmax(jnp.asarray(self.logging['energy']))
+        best_index = jnp.argmin(jnp.asarray(self.logging['energy']))
 
         return self.logging['energy'][best_index], self.logging2['CQAGstate'][best_index]
 

@@ -130,7 +130,7 @@ Nsites = int( 12)
 
 
 CsnFourier = CSnGradient(J= J, lattice = lattice4, Nsites=Nsites,
-                    partit=partit,p=int(4), num_samples =int(1000), max_iter = int(5001), lr=1e-3)
+                    partit=partit,p=int(4), num_samples =int(1000), max_iter = int(5001), lr=5e-3)
 
 
 Ham_rep = CsnFourier.Ham_rep()
@@ -156,15 +156,15 @@ Sn-CQA Ansatze testing phase
 
 L = CsnFourier.Expect_braket
 # opt_YJM, opt_H = CsnFourier.CSn_nadam(L, scale=float(1e-2))
-optimized_energy, O_gs= CsnFourier.CSn_nadam(L, scale=float(1e-2))
+optimized_energy, O_gs= CsnFourier.CSn_nadam(L, '6_sqaures', scale=float(1e-1), use_hessian=False)
 
 
 
 # O_gs = CsnFourier.Groundstate(opt_YJM, opt_H)
 # optimized_energy = CsnFourier.Expect_braket_energy(opt_YJM, opt_H)
-logging2 = {}
-logging2['EDGstate'] = np.asarray(V_gs)
-logging2['CQAGstate'] = np.asarray(O_gs)
+# logging2 = {}
+# logging2['EDGstate'] = np.asarray(V_gs)
+# logging2['CQAGstate'] = np.asarray(O_gs)
 # CsnFourier.logging['overlap'] = np.dot(np.array(V_gs), np.array(O_gs))
 # CsnFourier.logging['precision'] = np.abs(E_gs - np.asarray(optimized_energy)) / np.abs(E_gs)
 

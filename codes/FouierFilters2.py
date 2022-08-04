@@ -47,6 +47,7 @@ class FourierFilters:
 
 
 
+
         # J ------------------ [J_1, J_2]
 
         # lattice ---------------------- nested list containing the tranpositions
