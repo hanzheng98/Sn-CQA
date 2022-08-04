@@ -10,6 +10,7 @@ from jax import random
 from jax import grad, jit, vmap
 # import tensorflow_quatum as tfq
 from jax import custom_jvp
+import optax
 
 class CSnGradient(FourierFilters):
     '''
@@ -72,6 +73,27 @@ class CSnGradient(FourierFilters):
         # split = jnp.multiply(jnp.multiply(self.Nsites, self.Nsites), self.p)
         # YJMparams = jnp.reshape(Params.at[int(0):split].get(), newshape=(self.Nsites, self.Nsites, self.p))
         # Hparams = Params.at[split:int(-1)].get()
+        ansazte = self.CSn_Ansazte(YJMparams, Hparams)
+        GSket = jnp.zeros(self.dim)
+        for i in range(len(self.sampling)):
+            basis = jnp.zeros(self.dim)
+            basis = basis.at[i].set(self.sampling[i])
+            GSket = jnp.add(jnp.matmul(ansazte, basis), GSket)
+        GSket = jnp.real(GSket)
+        return GSket / jnp.linalg.norm(GSket)
+
+    def CSn_VStates_nat(self,Params):
+        '''
+        disgard the complex components for better numerical stability
+        :param YJMparams:
+        :param Hparams:
+        :return:
+        '''
+        #         YJMparams = Params[0]
+        #         Hparams = Params[1]
+        split = jnp.multiply(jnp.multiply(self.Nsites, self.Nsites), self.p)
+        YJMparams = jnp.reshape(Params.at[int(0):split].get(), newshape=(self.Nsites, self.Nsites, self.p))
+        Hparams = Params.at[split:int(-1)].get()
         ansazte = self.CSn_Ansazte(YJMparams, Hparams)
         GSket = jnp.zeros(self.dim)
         for i in range(len(self.sampling)):
@@ -450,8 +472,24 @@ class CSnGradient(FourierFilters):
 
 
 
-    def CSn_SR(self, loss,  scale = float(1e-2)):
-        pass
+    # def CSn_natural(self, J , scale = float(1e-2)):
+    #     '''
+    #     Use natural gradient descent here
+    #
+    #     :param J:
+    #     :param scale:
+    #     :return:
+    #     '''
+    #
+    #     LOG = True
+    #     Params = self.random_params(scale=scale)
+    #     csn_states = self.CSn_VStates_nat(Params)
+    #
+    #     # ----- Calculating the Fubini-Study metric
+
+
+
+
 
 
     def CSn_nadam(self,J,  Params = None, delta1=float(0.99), delta2=float(0.999), scale = float(1e-2), mode = 'jax'):
@@ -562,7 +600,7 @@ class CSnGradient(FourierFilters):
                 loss_energy = self.Expect_braket_energy(YJMparams, Hparams)
                 self.logging['energy'].append(loss_energy)
                 self.logging['iteration'].append(i)
-                if i % 20 ==0:
+                if i % 50 ==0:
                     print('updated gradient squared: {}---{}'.format(squared_grad['YJM'].shape, squared_grad['H'].shape))
                     print('updated bia correction have the shape: {}--{}'.format(moment_squared_yjm.shape, moment_squared_h.shape))
                     print('updated YJMparams, Hparams have the shape: {}, {}'.format(YJMparams.shape, Hparams.shape))
