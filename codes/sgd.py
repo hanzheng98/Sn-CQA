@@ -613,7 +613,7 @@ class CSnGradient(FourierFilters):
         e = float(1e-7)  # Epsilon value to prevent the fractions going to infinity when denominator is zero
 
         if Params is None:
-            YJMparams, Hparams = self.random_params2(scale=scale)
+            YJMparams, Hparams = self.random_params2(scale=scale * 1e2)
         else:
             YJMparams = Params[0]
             Hparams = Params[1]
@@ -641,6 +641,15 @@ class CSnGradient(FourierFilters):
         # Run once to compile JIT (Just In Time). The next uses of grad_yjm and grad_h will now be fast
         grad_YJM(YJMparams, Hparams)
         grad_H(YJMparams, Hparams)
+        snapshotdate = datetime.datetime.now().strftime('%m-%d_%H-%M')
+        print('-----------------------')
+        print('running the optimization on --' + latticetype + '--'+ snapshotdate)
+        print('-------------List of hyperparamters---------')
+        print('number of layers p--{}'.format(self.p))
+        print('value of frustration--{}'.format(self.J[1]))
+        print('noise scale--{}'.format(scale))
+        print('learning rate {}'.format(self.lr))
+        print('-----------------------')
         for i in range(self.max_iter):
             # Gradient w.r.t. argumnet index 1 i.e., YJMparams
             grad_yjm= grad_YJM(YJMparams, Hparams)
@@ -648,11 +657,12 @@ class CSnGradient(FourierFilters):
             # Gradient w.r.t. argumnet index 2 i.e., Hparams
             grad_h = grad_H(YJMparams, Hparams)
 
-            if self.quantumnoise:
-                noiseYJM = jax.random.normal(random.PRNGKey(int(24)), jnp.shape(YJMparams)) * (scale)
-                noiseH =jax.random.normal(random.PRNGKey(int(23)), jnp.shape(Hparams)) * (scale )
-                grad_yjm += noiseYJM
-                grad_h += noiseH
+            # if self.quantumnoise:
+            #     # print('adding quantum noise')
+            #     noiseYJM = jax.random.normal(random.PRNGKey(int(24)), jnp.shape(YJMparams)) * (scale)
+            #     noiseH =jax.random.normal(random.PRNGKey(int(23)), jnp.shape(Hparams)) * (scale )
+            #     grad_yjm += noiseYJM
+            #     grad_h += noiseH
 
             if use_hessian:
                 YJMHessian = jax.jit(jax.jacfwd(jax.jacrev(lambda yjmparams: J(yjmparams, Hparams))))
@@ -699,7 +709,9 @@ class CSnGradient(FourierFilters):
                 Hparams -= jnp.multiply((self.lr / jnp.add(jnp.sqrt(moment_squared_h) , e)) ,
                             jnp.add(jnp.multiply(delta1 , moment_h) , jnp.multiply(jnp.subtract(float(1) , delta1) ,grad_h )
                             / jnp.subtract(float(1) , jnp.power(delta2, (jnp.add(i , int(1)))))))
-
+                if self.quantumnoise:
+                    YJMparams += jax.random.normal(random.PRNGKey(int(7)), jnp.shape(YJMparams)) * (scale  )
+                    Hparams += jax.random.normal(random.PRNGKey(int(8)), jnp.shape(Hparams)) * (scale )
                 # print('updated gradient squared: {}---{}'.format(squared_grad['YJM'].shape, squared_grad['H'].shape))
                 # print('updated bia correction have the shape: {}--{}'.format(moment_squared_yjm.shape,
                 #                                                              moment_squared_h.shape))
@@ -724,12 +736,12 @@ class CSnGradient(FourierFilters):
                 #     print('finding the optimized parameters for the energy expectation: {}'.format(loss))
                 #     return YJMparams, Hparams
 
-        snapshotdate = datetime.datetime.now().strftime('%m-%d_%H-%M')
+
         os.makedirs('../data/' + latticetype + '/'+  snapshotdate + '/')
         df = pd.DataFrame.from_dict(self.logging)
-        df.to_csv('../data/'  + latticetype + '/' + snapshotdate + '/CQA_J{}_lr{}'.format(self.J[1], self.lr))
+        df.to_csv('../data/'  + latticetype + '/' + snapshotdate + '/CQA_J{}_lr{}_loss.csv'.format(self.J[1], self.lr))
         df2 = pd.DataFrame.from_dict(self.logging2)
-        df2.to_csv('../data/' + latticetype + '/' + snapshotdate + '/CQA_J{}_lr{}'.format(self.J[1], self.lr))
+        df2.to_csv('../data/' + latticetype + '/' + snapshotdate + '/CQA_J{}_lr{}_states'.format(self.J[1], self.lr))
 
         best_index = jnp.argmin(jnp.asarray(self.logging['energy']))
 

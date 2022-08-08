@@ -53,9 +53,14 @@ KetNet Kagomme Lattice
 ----------------------------------------------------- 
 
 '''
+import argparse
+parser = argparse.ArgumentParser()
+parser.add_argument('--noise_scale', type=float, required=True)
+parser.add_argument('--lr', type=float, required=True)
+parser.add_argument('--J2', type=float, required=True)
+args = parser.parse_args()
 
-
-J = [1, 0.8]
+# J = [1, 0.8]
 # graph = nk.graph.Grid(extent= [2,4], pbc=False)
 # edges = graph.edges
 # nx.draw(graph.to_networkx(), with_labels=True, font_weight='bold')
@@ -75,10 +80,10 @@ mszsz = (np.kron(sigmaz, sigmaz))
 exchange = np.asarray([[0, 0, 0, 0], [0, 0, 2, 0], [0, 2, 0, 0], [0, 0, 0, 0]])
 
 bond_operator = [
-    (J[0] * mszsz).tolist(),
-    (J[1] * mszsz).tolist(),
-    (J[0] * exchange).tolist(),
-    (J[1] * exchange).tolist(),
+    (1.0 * mszsz).tolist(),
+    (args.J2 * mszsz).tolist(),
+    (1.0 * exchange).tolist(),
+    (args.J2 * exchange).tolist(),
 ]
 
 bond_color = [1, 2, 1, 2]
@@ -91,7 +96,7 @@ hi = nk.hilbert.Spin(s=float(0.5), total_sz=float(0.0), N=g.n_nodes)
 ha = nk.operator.GraphOperator(hi, graph=g, bond_ops=bond_operator, bond_ops_colors=bond_color)
 evals = nk.exact.lanczos_ed(ha, compute_eigenvectors=False)
 exact_gs_energy1 = evals[0]
-print('The exact ground-state energy from computational basis for J2 = {} is-- ({}) '.format(J[1], exact_gs_energy1/float(4)))
+print('The exact ground-state energy from computational basis for J2 = {} is-- ({}) '.format(args.J2, exact_gs_energy1/float(4)))
 
 
 
@@ -121,8 +126,8 @@ partit = [int(6),int(6)]
 Nsites = int( 12)
 
 
-CsnFourier = CSnGradient(J= J, lattice = lattice3, Nsites=Nsites,
-                    partit=partit,p=int(6), num_samples =int(1000), max_iter = int(5001), lr=2e-3)
+CsnFourier = CSnGradient(J= [1.0, args.J2], lattice = lattice3, Nsites=Nsites,
+                    partit=partit,p=int(6), num_samples =int(1000), max_iter = int(5001), lr=args.lr)
 
 
 Ham_rep = CsnFourier.Ham_rep()
@@ -146,16 +151,17 @@ Sn-CQA Ansatze testing phase
 -----------------------------------------------------------------------------
 '''
 
-J = CsnFourier.Expect_braket
-opt_YJM, opt_H, opt_energy_list= CsnFourier.CSn_nadam(J, scale=float(1e-1))
+L = CsnFourier.Expect_braket
+# opt_YJM, opt_H = CsnFourier.CSn_nadam(L, scale=float(1e-2))
+optimized_energy, O_gs= CsnFourier.CSn_nadam(L, 'Kagome_12spin', scale=args.noise_scale, use_hessian=False)
 
-import pandas as pd
+# import pandas as pd
 
-df = pd.DataFrame(opt_energy_list)
-df.to_csv('../data/CQA_J05_Kagome_t.csv')
+# df = pd.DataFrame(opt_energy_list)
+# df.to_csv('../data/CQA_J05_Kagome_t.csv')
 
-O_gs = CsnFourier.Groundstate(opt_YJM, opt_H)
-optimized_energy = CsnFourier.Expect_braket_energy(opt_YJM, opt_H)
+# O_gs = CsnFourier.Groundstate(opt_YJM, opt_H)
+# optimized_energy = CsnFourier.Expect_braket_energy(opt_YJM, opt_H)
 
 print('the optimized ground state: {}'.format(O_gs))
 print('------------------------------------')
