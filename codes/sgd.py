@@ -45,7 +45,7 @@ class CSnGradient(FourierFilters):
         # print(length)
         return jnp.multiply(scale, random.normal(random.PRNGKey(self.p), (length,)))
 
-    def random_params2(self, scale=float(1e-2)):
+    def random_params2(self, scale=float(1e-1)):
         YJMparams = jnp.zeros((self.Nsites, self.Nsites, self.p))
         Hparams = jnp.zeros((self.p))
         for i in range(self.p):
@@ -585,7 +585,7 @@ class CSnGradient(FourierFilters):
 
 
 
-    def CSn_nadam(self,J, latticetype, Params = None, delta1=float(0.99), delta2=float(0.999), scale = float(1e-2), use_hessian = False):
+    def CSn_nadam(self,J, latticetype, Params = None, delta1=float(0.99), delta2=float(0.999), noise_scale = float(1e-2), use_hessian = False):
 
         """
         Using Nadam to accelerate the gradient descent
@@ -613,7 +613,7 @@ class CSnGradient(FourierFilters):
         e = float(1e-7)  # Epsilon value to prevent the fractions going to infinity when denominator is zero
 
         if Params is None:
-            YJMparams, Hparams = self.random_params2(scale=scale * 1e2)
+            YJMparams, Hparams = self.random_params2()
         else:
             YJMparams = Params[0]
             Hparams = Params[1]
@@ -647,7 +647,7 @@ class CSnGradient(FourierFilters):
         print('-------------List of hyperparamters---------')
         print('number of layers p--{}'.format(self.p))
         print('value of frustration--{}'.format(self.J[1]))
-        print('noise scale--{}'.format(scale))
+        print('noise scale--{}'.format(noise_scale))
         print('learning rate {}'.format(self.lr))
         print('-----------------------')
         for i in range(self.max_iter):
@@ -710,8 +710,8 @@ class CSnGradient(FourierFilters):
                             jnp.add(jnp.multiply(delta1 , moment_h) , jnp.multiply(jnp.subtract(float(1) , delta1) ,grad_h )
                             / jnp.subtract(float(1) , jnp.power(delta2, (jnp.add(i , int(1)))))))
                 if self.quantumnoise:
-                    YJMparams += jax.random.normal(random.PRNGKey(int(7)), jnp.shape(YJMparams)) * (scale  )
-                    Hparams += jax.random.normal(random.PRNGKey(int(8)), jnp.shape(Hparams)) * (scale )
+                    YJMparams += jax.random.normal(random.PRNGKey(int(7)), jnp.shape(YJMparams)) * (noise_scale  )
+                    Hparams += jax.random.normal(random.PRNGKey(int(8)), jnp.shape(Hparams)) * (noise_scale )
                 # print('updated gradient squared: {}---{}'.format(squared_grad['YJM'].shape, squared_grad['H'].shape))
                 # print('updated bia correction have the shape: {}--{}'.format(moment_squared_yjm.shape,
                 #                                                              moment_squared_h.shape))
@@ -739,9 +739,9 @@ class CSnGradient(FourierFilters):
 
         os.makedirs('../data/' + latticetype + '/'+  snapshotdate + '/')
         df = pd.DataFrame.from_dict(self.logging)
-        df.to_csv('../data/'  + latticetype + '/' + snapshotdate + '/CQA_J{}_lr{}_loss.csv'.format(self.J[1], self.lr))
+        df.to_csv('../data/'  + latticetype + '/' + snapshotdate + '/CQA_J{}_lr{}_noise{}_loss.csv'.format(self.J[1], self.lr, noise_scale))
         df2 = pd.DataFrame.from_dict(self.logging2)
-        df2.to_csv('../data/' + latticetype + '/' + snapshotdate + '/CQA_J{}_lr{}_states'.format(self.J[1], self.lr))
+        df2.to_csv('../data/' + latticetype + '/' + snapshotdate + '/CQA_J{}_lr{}_noise{}_states'.format(self.J[1], self.lr, noise_scale))
 
         best_index = jnp.argmin(jnp.asarray(self.logging['energy']))
 

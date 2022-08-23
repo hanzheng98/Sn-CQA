@@ -153,7 +153,7 @@ Sn-CQA Ansatze testing phase
 
 L = CsnFourier.Expect_braket
 # opt_YJM, opt_H = CsnFourier.CSn_nadam(L, scale=float(1e-2))
-optimized_energy, O_gs= CsnFourier.CSn_nadam(L, 'Kagome_12spin', scale=args.noise_scale, use_hessian=False)
+optimized_energy, O_gs= CsnFourier.CSn_nadam(L, 'Kagome_12spin', noise_scale=args.noise_scale, use_hessian=False)
 
 # import pandas as pd
 
