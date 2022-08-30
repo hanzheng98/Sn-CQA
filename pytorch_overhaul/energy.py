@@ -7,6 +7,10 @@ from torch_scatter import scatter
 import torch.nn.functional as F 
 from model_cqa import get_basis, CQAFourier
 
+
+from torch.utils.tensorboard import SummaryWriter
+writer = SummaryWriter()
+
 '''
 adding arguments here
 '''
@@ -18,7 +22,7 @@ parser.add_argument('--J', type=list[float, float], default=[1.0, 0.5])
 parser.add_argument('--irrep', type=list, default=[6,6])
 parser.add_argument('--p', type=int, default=4)
 parser.add_argument('--num_sites', type=int, default=12)
-parser.add_argument('--numiter', type = int, default=3000)
+parser.add_argument('--numiter', type = int, default=500)
 parser.add_argument('--lattice', type=str, default='rectangular')
 parser.add_argument('--sample_size', type=int, default=200)
 args = parser.parse_args()
@@ -28,10 +32,11 @@ def train(model, trial_state, optimizer, observable, device):
     # total_loss = 0                                                               
     optimizer.zero_grad()
     x = model(trial_state)
-    observable = torch.stack([observable, torch.zeros_like(observable)], dim=-1)
-    energy_expectation = torch.einsum('ac, abc, bc ->c', torch.view_as_real(torch.conj_physical(x)),
-                                                 observable, torch.view_as_real(x))
-    energy_expectation = energy_expectation[0]
+    observable = torch.view_as_complex(torch.stack([observable, torch.zeros_like(observable)], dim=-1))
+    energy_expectation = torch.einsum('a, ab, b', torch.conj_physical(x),
+                                                 observable, x)
+    # print(energy_expectation)
+    energy_expectation = torch.real(energy_expectation)
     energy_expectation.backward()
     optimizer.step()
     return energy_expectation.item()
@@ -63,10 +68,13 @@ def main():
         loss = train(model, init_state, optimizer, observable, args.device)
         scheduler.step(loss)
         print(f'Iteration: {i:03d}, LR: {lr:.5f}, Loss: {loss: .4f}')
+        writer.add_scalar("Loss/train", loss, i)
     EDvalues, EDvectors = torch.linalg.eig(model.Heisenberg)
     EDvector = EDvectors[torch.argmin(torch.real(EDvalues))]
     EDvalue = EDvalues[torch.argmin(torch.real(EDvalues))]
     print('ED energy: {}'.format(EDvalue))
+    writer.flush()
+    writer.close()
 if __name__ == "__main__":
     main()
 

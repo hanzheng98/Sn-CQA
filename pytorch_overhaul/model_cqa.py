@@ -57,7 +57,7 @@ class CQAFourier(torch.nn.Module):
                 YJM = self._get_YJMs(i,j)
                 if self.debug:
                     assert torch.allclose(YJM, torch.diag(torch.diag(YJM)), atol=5e-5)
-                    print('--------')
+                    # print('--------')
                 YJMs_mat[:,i,j] = torch.diag(YJM)
         self.YJMs = YJMs_mat.view(self.dim, self.num_sites * self.num_sites)
         self.Heisenberg = self._Ham_rep()
@@ -81,13 +81,19 @@ class CQAFourier(torch.nn.Module):
             YJM_ham = YJMneural(self.YJMs)
             YJM_ham = torch.view_as_complex(torch.stack([torch.zeros_like(YJM_ham), YJM_ham], dim=-1)).to(device=self.device)
             YJM_evo = torch.diag(torch.exp(YJM_ham.sum(dim = -1)))
+            if self.debug: 
+                assert torch.allclose(torch.view_as_real(YJM_ham)[:,:,0], torch.zeros(YJM_ham.shape))
             # YJM_evo = torch.matrix_exp(YJM_ham)
             Heis_ham = Heisneural(self.Heisenberg.unsqueeze(dim=-1)).squeeze()
             Heis_ham = torch.view_as_complex(torch.stack([torch.zeros_like(Heis_ham), Heis_ham], dim=-1)).to(device=self.device)
-            if self.debug: 
-                print('the shape of the Heisenberg hamiltonian: {}'.format(Heis_ham.shape))
+                # print('the shape of the Heisenberg hamiltonian: {}'.format(Heis_ham.shape))
+
                 # print(Heis_ham.shape)
             Heis_evo = torch.matrix_exp(Heis_ham)
+            if self.debug: 
+                # print('the shape of the Heisenberg hamiltonian: {}'.format(Heis_ham.shape))
+                assert torch.allclose(torch.real(Heis_ham), torch.zeros(Heis_ham.shape))
+                print('norm of the imaginary part: {}'.format(torch.norm(torch.imag(Heis_evo))))
             cqa_mat_layer = torch.matmul(Heis_evo, YJM_evo)
         cqa_mat = torch.matmul(cqa_mat, cqa_mat_layer)
         
