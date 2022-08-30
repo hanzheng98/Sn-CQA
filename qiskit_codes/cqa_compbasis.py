@@ -113,8 +113,8 @@ class CQA(QuantumCircuit):
             return YJM 
         elif k ==1: 
             YJM = self._transpo2pauli(0, 1)
-            print('---------')
-            print(YJM)
+            # print('---------')
+            # print(YJM)
             return YJM
 
         elif k >1:
