@@ -9,11 +9,11 @@ from torch.nn import Linear, ModuleList, ModuleDict
 
 '''
 
-def get_basis(dim, sample_size):
-        '''
-        getting the basis from sampling
-        '''
-        
+def get_basis(dim, sample_size, debug=False, state=None):
+    '''
+    getting the basis from sampling
+    '''
+    if debug is False: 
         sampling = torch.randint(0, dim, (sample_size, ))
         basis = torch.zeros(dim)
         for sample in sampling:
@@ -22,6 +22,9 @@ def get_basis(dim, sample_size):
             basis += sample_basis
         basis = torch.view_as_complex(torch.stack([basis, torch.zeros_like(basis)], dim=-1))
         return basis / torch.norm(basis, p=2)
+    elif debug is True: 
+        basis = torch.view_as_complex(torch.stack([state, torch.zeros_like(state)], dim=-1)) 
+        return basis 
 
 
 

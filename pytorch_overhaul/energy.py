@@ -1,3 +1,4 @@
+from ctypes import alignment
 from sched import scheduler
 import torch 
 import argparse
@@ -25,9 +26,10 @@ parser.add_argument('--num_sites', type=int, default=12)
 parser.add_argument('--numiter', type = int, default=500)
 parser.add_argument('--lattice', type=str, default='rectangular')
 parser.add_argument('--sample_size', type=int, default=200)
+parser.add_argument('--lr', type=float, default=5e-3)
 args = parser.parse_args()
 
-def train(model, trial_state, optimizer, observable, device):
+def train(model, trial_state, optimizer, observable, device, debug=False):
     model.train()                                                               
     # total_loss = 0                                                               
     optimizer.zero_grad()
@@ -36,10 +38,19 @@ def train(model, trial_state, optimizer, observable, device):
     energy_expectation = torch.einsum('a, ab, b', torch.conj_physical(x),
                                                  observable, x)
     # print(energy_expectation)
-    energy_expectation = torch.real(energy_expectation)
-    energy_expectation.backward()
-    optimizer.step()
-    return energy_expectation.item()
+    if debug is False: 
+        energy_expectation = torch.real(energy_expectation)
+        energy_expectation.backward()
+        optimizer.step()
+        return energy_expectation.item()
+    elif debug:
+        EDvalues, EDvectors = torch.linalg.eig(model.Heisenberg)
+        EDvector = EDvectors[torch.argmin(torch.real(EDvalues))]
+        EDvalue = EDvalues[torch.argmin(torch.real(EDvalues))] 
+        alignment_loss = torch.norm(x - EDvector)
+        alignment_loss.backward()
+        optimizer.step()
+        return alignment_loss.item()
         
 def main():
     if args.lattice == 'kagome':
@@ -58,20 +69,24 @@ def main():
     else: 
         raise NotImplementedError
     model = CQAFourier(args.J, args.num_sites, args.p, args.irrep, lattice, debug=False)
-    optimizer = Adam(model.parameters(), lr=0.005)
+    optimizer = Adam(model.parameters(), lr=args.lr)
     # optimizer = LBFGS(model.parameters(), lr=1)
-    scheduler = ReduceLROnPlateau(optimizer,mode='min', factor=0.5, patience=100, min_lr=0.00005)
-    init_state = get_basis(model.dim, args.sample_size)
+    # scheduler = ReduceLROnPlateau(optimizer,mode='min', factor=0.5, patience=100, min_lr=0.00005)
     observable = model.Heisenberg
-    for i in range(args.numiter):
-        lr = scheduler.optimizer.param_groups[0]['lr']
-        loss = train(model, init_state, optimizer, observable, args.device)
-        scheduler.step(loss)
-        print(f'Iteration: {i:03d}, LR: {lr:.5f}, Loss: {loss: .4f}')
-        writer.add_scalar("Loss/train", loss, i)
     EDvalues, EDvectors = torch.linalg.eig(model.Heisenberg)
     EDvector = EDvectors[torch.argmin(torch.real(EDvalues))]
     EDvalue = EDvalues[torch.argmin(torch.real(EDvalues))]
+    # init_state = get_basis(model.dim, args.sample_size, debug=True, state=EDvector)
+    for i in range(args.numiter):
+        lr = scheduler.optimizer.param_groups[0]['lr']
+        loss = train(model, EDvector, optimizer, observable, args.device, debug=True)
+        scheduler.step(loss)
+        # optimizer.step()
+        print(f'Iteration: {i:03d}, LR: {lr:.5f}, Loss: {loss: .4f}')
+        writer.add_scalar("Loss/train", loss, i)
+    # EDvalues, EDvectors = torch.linalg.eig(model.Heisenberg)
+    # EDvector = EDvectors[torch.argmin(torch.real(EDvalues))]
+    # EDvalue = EDvalues[torch.argmin(torch.real(EDvalues))]
     print('ED energy: {}'.format(EDvalue))
     writer.flush()
     writer.close()
