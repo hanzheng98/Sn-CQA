@@ -54,14 +54,14 @@ def main():
         raise NotImplementedError
     model = CQAFourier(args.J, args.num_sites, args.p, args.irrep, lattice, debug=False)
     optimizer = Adam(model.parameters(), lr=0.005)
-    optimizer = LBFGS(model.parameters(), lr=1)
+    # optimizer = LBFGS(model.parameters(), lr=1)
     scheduler = ReduceLROnPlateau(optimizer,mode='min', factor=0.5, patience=100, min_lr=0.00005)
     init_state = get_basis(model.dim, args.sample_size)
     observable = model.Heisenberg
     for i in range(args.numiter):
-        lr = scheduler.param_groups[0]['lr']
+        lr = scheduler.optimizer.param_groups[0]['lr']
         loss = train(model, init_state, optimizer, observable, args.device)
-        scheduler.step()
+        scheduler.step(loss)
         print(f'Iteration: {i:03d}, LR: {lr:.5f}, Loss: {loss: .4f}')
     EDvalues, EDvectors = torch.linalg.eig(model.Heisenberg)
     EDvector = EDvectors[torch.argmin(torch.real(EDvalues))]
