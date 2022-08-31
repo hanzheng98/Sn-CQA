@@ -39,7 +39,7 @@ def get_basis(dim, sample_size, debug=False, state=None):
 class CQAFourier(torch.nn.Module):
 
     def __init__(self,J: list[int, int],num_sites:int, p:int, 
-                            irrep: list[int, int], lattice: list, device='cpu', debug: bool=False):
+                            irrep: list[int, int], lattice: list, ham_scale: float ,device='cpu', debug: bool=False):
         super(CQAFourier, self).__init__()
         self.num_sites = num_sites
         self.p = p 
@@ -51,6 +51,7 @@ class CQAFourier(torch.nn.Module):
         self.lattice = lattice
         self.device = device
         self.debug = debug
+        self.ham_scale = ham_scale
         YJMs_mat = torch.zeros((self.dim, self.num_sites, self.num_sites), device=self.device)
         for i in range(self.num_sites):
             if i == self.num_sites -1:
@@ -82,23 +83,32 @@ class CQAFourier(torch.nn.Module):
         # cqa_mat_layer = torch.stack([cqa_mat_layer, torch.zeros_like(cqa_mat_layer)], dim=-1) 
         for YJMneural, Heisneural in zip(self.YJMparams, self.Heisparams):
             YJM_ham = YJMneural(self.YJMs)
+            YJM_ham = (YJM_ham / torch.norm(YJM_ham,p=2, dim=0)).sum(dim=-1)
             YJM_ham = torch.view_as_complex(torch.stack([torch.zeros_like(YJM_ham), YJM_ham], dim=-1)).to(device=self.device)
-            YJM_evo = torch.diag(torch.exp(YJM_ham.sum(dim = -1)))
+            YJM_evo = torch.diag(torch.exp(YJM_ham * self.ham_scale)) ## YJM_ham.shape (dim, numterms)
+            YJM_evo = YJM_evo / torch.norm(YJM_evo, p=2)
             if self.debug: 
-                assert torch.allclose(torch.view_as_real(YJM_ham)[:,:,0], torch.zeros(YJM_ham.shape))
+                # print('norm of the YJM unitary: {}'.format(torch.norm(YJM_evo, p=2)))
+                if torch.allclose(torch.tensor(1.0), torch.norm(YJM_evo, p=2), atol=1e-5) is False:
+                    print('norm of unitary YJM: {}'.format(torch.norm(YJM_evo, p=2)))
+                assert torch.allclose(torch.real(YJM_ham), torch.zeros(YJM_ham.shape))
             # YJM_evo = torch.matrix_exp(YJM_ham)
-            Heis_ham = Heisneural(self.Heisenberg.unsqueeze(dim=-1)).squeeze()
+            Heis_ham = Heisneural(self.Heisenberg.unsqueeze(dim=-1)).squeeze() # heisenberg.shape 
             Heis_ham = torch.view_as_complex(torch.stack([torch.zeros_like(Heis_ham), Heis_ham], dim=-1)).to(device=self.device)
                 # print('the shape of the Heisenberg hamiltonian: {}'.format(Heis_ham.shape))
 
                 # print(Heis_ham.shape)
-            Heis_evo = torch.matrix_exp(Heis_ham)
-            if self.debug: 
+            Heis_evo = torch.matrix_exp(Heis_ham * self.ham_scale)
+            Heis_evo = Heis_evo / torch.norm(Heis_evo, p=2)
+            if self.debug:
+                # print('norm of the heisenberg unitary: {}'.format(torch.norm(Heis_evo, p=2)))
+                if torch.allclose(torch.tensor(1.0), torch.norm(Heis_evo, p=2), atol=1e-5) is False: 
+                    print('the norm of the unitary heisenberg: {}'.format(torch.norm(Heis_evo))) 
                 # print('the shape of the Heisenberg hamiltonian: {}'.format(Heis_ham.shape))
                 assert torch.allclose(torch.real(Heis_ham), torch.zeros(Heis_ham.shape))
-                print('norm of the imaginary part: {}'.format(torch.norm(torch.imag(Heis_evo))))
+                # print('norm of the imaginary part: {}'.format(torch.norm(torch.imag(Heis_evo))))
             cqa_mat_layer = torch.matmul(Heis_evo, YJM_evo)
-        cqa_mat = torch.matmul(cqa_mat, cqa_mat_layer)
+        cqa_mat = torch.matmul(cqa_mat_layer, cqa_mat)
         
         x = torch.matmul(cqa_mat, x) # return a approximate states for energy minimization
         return x /torch.norm(x, p=2)
