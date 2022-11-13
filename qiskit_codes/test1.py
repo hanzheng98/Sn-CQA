@@ -88,13 +88,14 @@ if __name__ == "__main__":
     #     lattice.add_edge(edgeJ1[0], edgeJ1[1])
     num_sites = 12
     Heisenberg = getJ1J2_Ham([1.0, 0.5], edge_colors[0], edge_colors[1], num_sites)
-    print(Heisenberg)
+    # print(Heisenberg)
     
     p = 2 # num of alternating layers
     YJMparams = np.random.randn(p, num_sites, num_sites)
     Heisparams = np.random.randn(p)
     irrep = [6, 6]
-    Sn_cqa = CQA(num_sites, p, Heisenberg, irrep, YJMparams, Heisparams, debug=False)
+    Sn_cqa = CQA(num_sites, p, Heisenberg, irrep, YJMparams, Heisparams, debug=False, mode='random')
+    print(Sn_cqa)
     print(Sn_cqa.decompose())
     Sn_cqa_gates = transpile(Sn_cqa, basis_gates=['id', 'rz', 'sx', 'x', 'cx', 'cy', 'cry', 'h', 'ry'])
     print('depth of the sn_cqa_gates: {}'.format(Sn_cqa_gates.depth()))

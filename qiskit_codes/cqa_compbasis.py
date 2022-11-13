@@ -13,26 +13,58 @@ from qiskit.opflow import PauliOp, PauliSumOp
 
 
 
+def getJ1J2_Ham(J: list, J1_edges: list, J2_edges:list, num_sites: int) -> PauliSumOp:
+    xstring = np.zeros(num_sites)
+    zstring = np.zeros(num_sites)
+    J1_lst = []
+    for J1pauli in J1_edges:  
+        J1pauli_lst = []
+        J1xstring = np.zeros(num_sites)
+        J1xstring[J1pauli[0]] = 1
+        J1xstring[J1pauli[1]] = 1 
+        J1zstring = np.zeros(num_sites)
+        J1zstring[J1pauli[0]] = 1
+        J1zstring[J1pauli[1]] = 1 
+        J1pauli_lst.append(Pauli(zstring, J1xstring))
+        J1pauli_lst.append(Pauli(J1zstring, xstring))
+        J1pauli_lst.append(Pauli(J1zstring, J1zstring))
+        J1_lst.append(PauliSumOp(SparsePauliOp(J1pauli_lst, coeffs=np.array([J[0], J[0], J[0]]))))
+    J2_lst = []
+    for J2pauli in J2_edges:  
+        J2pauli_lst = []
+        J2xstring = np.zeros(num_sites)
+        J2xstring[J2pauli[0]] = 1
+        J2xstring[J2pauli[1]] = 1 
+        J2zstring = np.zeros(num_sites)
+        J2zstring[J2pauli[0]] = 1
+        J2zstring[J2pauli[1]] = 1 
+        J2pauli_lst.append(Pauli(zstring, J2xstring))
+        J2pauli_lst.append(Pauli(J2zstring, xstring))
+        J2pauli_lst.append(Pauli(J2zstring, J2zstring))
+        J2_lst.append(PauliSumOp(SparsePauliOp(J2pauli_lst, coeffs=np.array([J[1], J[1], J[1]]))))
+    heisenberg = sum(J1_lst) + sum(J2_lst)
+    return heisenberg
+
 
 class CQA(QuantumCircuit):
     '''
     The circuit implementing CQA circuits on the computational 
     basis using the qiskit toolkit. 
 
-
-    
+ 
     '''
     def __init__(
         self, 
         num_sites: int, 
         p: int, 
-        heisenberg: Union[PauliOp, PauliSumOp, PauliList, SparsePauliOp], 
+        heisenberg: Optional[Union[PauliOp, PauliSumOp, PauliList, SparsePauliOp]], 
         irrep: list[int, int], 
         YJMparams: np.ndarray, 
         Heisparams: np.ndarray,
         num_time_slices: int=1,
         debug: bool=False,
         name: str = 'Sn-CQA',
+        mode: Optional[str]='all'
     ) -> QuantumCircuit: 
         self.num_sites = num_sites
         self.p = p 
@@ -43,6 +75,7 @@ class CQA(QuantumCircuit):
         self.Heisparams = Heisparams
         self.num_time_slices = num_time_slices
         self.name = name
+        self.mode = mode
         num_bell = 2*  (self.irrep[0] - abs(self.irrep[0] - self.irrep[1]))
         num_comp = abs(self.irrep[0] - self.irrep[1])
         'computing the state initialization method'
@@ -70,40 +103,60 @@ class CQA(QuantumCircuit):
         
 
     def _getYJMs(self, yjmcoeffs: np.ndarray) -> PauliSumOp:
+
         
         YJM_ham = self._getYJM(0)
-        for k in range(self.num_sites):
-            YJM_k = self._getYJM(k)
+        if self.mode == 'all':
+            for k in range(self.num_sites):
+                YJM_k = self._getYJM(k)
+                if self.debug: 
+                    print('--------')
+                    assert (np.isreal(yjmcoeffs)).all()
+                # assert YJM_k.is_hermitian() is True
+                for l in range(self.num_sites):
+                    if l >= k:
+                        YJM_l = self._getYJM(l)
+                        YJM_prod = YJM_k @ YJM_l
+                        YJM_ham += 0.5* (YJM_prod.adjoint() + YJM_prod) * np.around(yjmcoeffs[k, l], decimals=10)
+                        # if self.debug: 
+                        #     print('-----({}, {})-----'.format(k, l))
+                            # YJM_prod = YJM_k @ YJM_l 
+                            # YJM_prod.coeffs = np.real(YJM_prod.coeffs)
+                            # print(np.imag(YJM_k.coeffs))
+                            # print(np.imag(YJM_l.coeffs))
+                            # print(np.imag(YJM_ham.coeffs))
+                            # assert (np.isreal(YJM_ham.coeffs)).all()
+                            # print(np.imag((YJM_k @ YJM_l).coeffs))
+                            # assert np.isreal((YJM_k @ YJM_l).coeffs).all()
+                        #     print('----------------')
+                        # assert YJM_l.is_hermitian() is True
+                        # YJM_prod = YJM_k @ YJM_l
+                        # YJM_ham += 0.5* (YJM_prod.adjoint() + YJM_prod) * yjmcoeffs[k, l]
+            YJM_ham = YJM_ham - self._getYJM(0)
             if self.debug: 
-                print('--------')
-                assert (np.isreal(yjmcoeffs)).all()
-            # assert YJM_k.is_hermitian() is True
-            for l in range(self.num_sites):
-                if l >= k:
-                    YJM_l = self._getYJM(l)
-                    YJM_prod = YJM_k @ YJM_l
-                    YJM_ham += 0.5* (YJM_prod.adjoint() + YJM_prod) * np.around(yjmcoeffs[k, l], decimals=2)
-                    # if self.debug: 
-                    #     print('-----({}, {})-----'.format(k, l))
-                        # YJM_prod = YJM_k @ YJM_l 
-                        # YJM_prod.coeffs = np.real(YJM_prod.coeffs)
-                        # print(np.imag(YJM_k.coeffs))
-                        # print(np.imag(YJM_l.coeffs))
-                        # print(np.imag(YJM_ham.coeffs))
-                        # assert (np.isreal(YJM_ham.coeffs)).all()
-                        # print(np.imag((YJM_k @ YJM_l).coeffs))
-                        # assert np.isreal((YJM_k @ YJM_l).coeffs).all()
-                    #     print('----------------')
-                    # assert YJM_l.is_hermitian() is True
-                    # YJM_prod = YJM_k @ YJM_l
-                    # YJM_ham += 0.5* (YJM_prod.adjoint() + YJM_prod) * yjmcoeffs[k, l]
-        YJM_ham = YJM_ham - self._getYJM(0)
-        if self.debug: 
-            # coeffs = np.around(YJM_ham.coeffs, decimals=2)
-            # YJM_ham = 0.5 * (YJM_ham.adjoint() + YJM_ham)
-            print('first YJM elements: {}'.format(np.imag(YJM_ham.coeffs)))
-            # assert (np.isreal(YJM_ham.coeffs).all())
-            # assert YJM_ham.is_hermitian() is True
+                # coeffs = np.around(YJM_ham.coeffs, decimals=2)
+                # YJM_ham = 0.5 * (YJM_ham.adjoint() + YJM_ham)
+                print('first YJM elements: {}'.format(np.imag(YJM_ham.coeffs)))
+                # assert (np.isreal(YJM_ham.coeffs).all())
+                # assert YJM_ham.is_hermitian() is True
+        elif self.mode =='first-order':
+            yjmcoeffs =  yjmcoeffs.flatten()
+            for k in range(self.num_sites):
+                YJM_k = self._getYJM(k)
+                YJM_ham += YJM_k * np.around(yjmcoeffs[k], decimals=10)
+            YJM_ham = YJM_ham - self._getYJM(0)
+        elif self.mode == 'random':
+            yjmcoeffs =  yjmcoeffs.flatten()
+            selection = np.random.randint(0, self.num_sites, int(np.floor(self.num_sites / 3)))
+            for k in range(len(selection)): 
+                # print(f'i {i} num {num}')
+                YJM_k = self._getYJM(selection[k])
+                # print(f'YJM_k {YJM_k}')
+                YJM_ham +=  YJM_k * np.around(yjmcoeffs[k], decimals=10)
+            YJM_ham = YJM_ham - self._getYJM(0)
+        else: 
+            print('CQA module currently not implemented')
+            raise NotImplementedError
         return YJM_ham.reduce()
     
 
