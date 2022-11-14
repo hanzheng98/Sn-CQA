@@ -198,7 +198,7 @@ class CQA(QuantumCircuit):
             pauli_lst.append(Pauli((z, x0)))
             pauli_lst.append(Pauli((z, x)))
             pauli_lst.append(Pauli((z0, x0)))
-            coeff = np.array([2.0, 2.0, 2.0, 0.5])
+            coeff = np.array([1.0, 1.0, 1.0, 0.5])
             transpo_pauli = PauliSumOp(SparsePauliOp(PauliList(pauli_lst), coeffs=coeff, ignore_pauli_phase=True))
             if self.debug:
                 print('---transpo_pauli-----')

@@ -11,13 +11,15 @@ from qiskit.providers.aer.noise import NoiseModel
 from tqdm import tqdm
 import jax 
 import jax.numpy as jnp
+# import pennylane.numpy as pnp 
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--lr', type=float, default=0.1)
 parser.add_argument('--p', type=int, default=2)
 parser.add_argument('--irrep', type=list, default=[6,6])
 parser.add_argument('--num_qubits', type=int, default=12)
-parser.add_argument('--num_yjms', type=int, default=4)
+parser.add_argument('--num_yjms', type=int, default=1)
+parser.add_argument('--trotter_slice', type=int, default=1)
 parser.add_argument('--lattice_size', type=list, default=[3,4])
 parser.add_argument('--J', type=list, default=[1.0, 1.0])
 parser.add_argument('--iterations', type=int, default=10)
@@ -101,15 +103,35 @@ def coxeters(heis_params: jnp.array, layer:int):
     if layer % 2 == 0: 
         for j, i  in enumerate(range(args.num_qubits)):
             if i % 2 ==0:
-                print(f'j, i: {j, i}')
-                qml.exp(qml.SWAP(wires=[i, i+1]), coeff=heis_params[int(j/2)])
+                # print(f'j, i: {j, i}')
+                swap = _swap2pauli(i, i+1, mode='ham')
+                qml.ApproxTimeEvolution(swap, heis_params[int(j/2)], args.trotter_slice)
     elif layer % 2==1:
         for j, i in enumerate(range(args.num_qubits)):
             if i % 2 ==1:
-                qml.exp(qml.SWAP(wires=[i, i+1]), coeff=heis_params[int((j-1)/2)])
+                swap = _swap2pauli(i, i+1, mode='ham')
+                qml.ApproxTimeEvolution(swap, heis_params[int((j-1)/2)], args.trotter_slice)
 
 
 # Do the YJM coexter(only first order so far on Pennylane)
+
+def _swap2pauli(i: int, j:int, mode='ham'): 
+    '''
+    using the formula: SWAP(i j) = Si . Sj + 1/2 I (without I ) 
+    '''
+    if mode=='ham':
+        coeff = np.ones(3)
+        hamiltonian = [qml.PauliX(wires=i) @qml.PauliX(wires=j), 
+                    qml.PauliY(wires=i) @qml.PauliY(wires=j),
+                    qml.PauliZ(wires=i) @qml.PauliZ(wires=j) ]
+        return qml.Hamiltonian(coeff, hamiltonian)
+    elif mode=='list':
+        hamiltonian = [qml.PauliX(wires=i) @qml.PauliX(wires=j), 
+                    qml.PauliY(wires=i) @qml.PauliY(wires=j),
+                    qml.PauliZ(wires=i) @qml.PauliZ(wires=j) ]
+        return hamiltonian
+        
+
 
 def _get_YJM(idx:int):
     '''
@@ -119,14 +141,20 @@ def _get_YJM(idx:int):
         print('too trivial choice')
         raise NotImplementedError
     elif idx ==1: 
-        YJM = qml.SWAP(wires=[0, 1])
+        YJM = _swap2pauli(0,1, mode='ham')
         # print('---------')
         # print(YJM)
         return YJM
     else:
-        YJM = qml.SWAP(wires=[0, idx])
-        for i in range(1, idx):
-            YJM += qml.SWAP(wires=[i, idx]) 
+        swaps = []
+        # yjm_lst = _swap2pauli(0, 1, mode='list')
+        for i in range(idx):
+            swaps.append(_swap2pauli(i, idx, mode='list'))
+            # YJM += qml.SWAP(wires=[i, idx])
+        # print(swaps)
+        flat_yjm_lst = [item for sublist in swaps for item in sublist]
+        # print(qml.Hamiltonian([1.0], [swaps[0]]))
+        return qml.Hamiltonian(np.ones(len(flat_yjm_lst)), flat_yjm_lst)
 
 
 def yjm_gates(yjm_params: jnp.array):
@@ -134,7 +162,7 @@ def yjm_gates(yjm_params: jnp.array):
     selection = np.random.randint(1, args.num_qubits, args.num_yjms)
     for i, sel in enumerate(selection):
         YJM = _get_YJM(sel)
-        qml.exp(YJM, coeff=yjm_params[i])
+        qml.ApproxTimeEvolution(YJM, yjm_params[i], args.trotter_slice)
 
 
 
@@ -157,11 +185,15 @@ def cqa_layers(params_dict:dict):
 Measuring wrt. the Heisenberg Hamiltonian 
 ------------------------------------------
 '''
-@qml.qnode(dev_mu, interface='jax')
+dev = qml.device("default.qubit", wires=args.num_qubits)
+
+@qml.qnode(dev, interface='jax')
 def cqa_circuit(params_dict: dict):
+    state_init(args.irrep)
     cqa_layers(params_dict)
     hamiltonian = getHam_square(args.lattice_size, args.J)
     return qml.expval(hamiltonian)
+    # return qml.expval(qml.PauliZ(wires=0))
 
 
 def train(loss): 
@@ -174,6 +206,9 @@ def train(loss):
     params_dict_init = {'YJM': jax.random.uniform(key1, (args.p, args.num_yjms)),
                     'Heis': jax.random.uniform(key2, (args.p,int(np.ceil(args.num_qubits/2))))}
     loss_history, grad_history, param_history = [], [], [params_dict_init]
+    # print('-------drawing the circuit--------')
+    # drawer = qml.draw(cqa_circuit)
+    # print(drawer(params_dict_init))
     # print(iteration)
     for it in tqdm(range(1, args.iterations + 1)): 
         p_dict = param_history[-1]
