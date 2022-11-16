@@ -12,6 +12,7 @@ import optax
 import pandas as pd
 import datetime
 import os
+from scipy.linalg import eigh, eigvalsh
 
 '''
 using optax meta learning 
@@ -23,6 +24,17 @@ import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 import optax
+from tqdm import tqdm 
+
+
+# import argparse
+# parser = argparse.ArgumentParser()
+# # parser.add_argument('--noise_scale', type=float, required=True)
+# parser.add_argument('--lr', type=float, required=True)
+# parser.add_argument('--J2', type=float, required=True)
+# parser.add_argument('--p', type=int, default=4)
+# args = parser.parse_args()
+
 
 class CSnGradient(FourierFilters):
     '''
@@ -41,9 +53,9 @@ class CSnGradient(FourierFilters):
         self.max_iter = max_iter
         self.gamma = gamma
         self.sampling = np.random.randint(0, high=self.dim, size=num_samples)
-        num_trans = jnp.add(len(self.lattice[0]), len(self.lattice[1]))
+        # num_trans = jnp.add(len(self.lattice[0]), len(self.lattice[1]))
         # trans_const = jnp.multiply(num_trans, jnp.ones(self.dim), dtype='complex128')
-        self.num_trans = num_trans
+        # self.num_trans = num_trans
         self.quantumnoise = quantumnoise
         self.logging = {'energy': [], 'iteration':[]}
         self.logging2 = {'CQAGstate': [], 'iteration':[]}
@@ -62,8 +74,8 @@ class CSnGradient(FourierFilters):
             w_key, b_key = random.split(random.PRNGKey(int(i)))
             YJMparams = YJMparams.at[:, :, i].set(jnp.multiply(scale, random.normal(w_key, (self.Nsites, self.Nsites))))
             Hparams = Hparams.at[i].set(jnp.multiply(scale, random.normal(b_key)))
-        return YJMparams, Hparams
-
+        params_dict = {'YJM': YJMparams, 'Heis': Hparams} 
+        return params_dict
     '''
     -----------------------------------------------------------------------
     
@@ -112,11 +124,11 @@ class CSnGradient(FourierFilters):
         # self.logging['energy'].append(expectation)
         return expectation
     
-    def Expect_braket_energy(self,YJMparams, Hparams, scale=1e-3):
+    def Expect_braket_energy(self,params_dict: dict, scale=1e-3):
         # split = jnp.multiply(jnp.multiply(self.Nsites, self.Nsites), self.p)
         # YJMparams = jnp.reshape(Params.at[int(0):split].get(), newshape=(self.Nsites, self.Nsites, self.p))
         # Hparams = Params.at[split:int(-1)].get()
-        groundstate = self.CSn_VStates(YJMparams, Hparams)
+        groundstate = self.CSn_VStates(params_dict['YJM'], params_dict['Heis'])
         rep_H = self.Ham_rep().astype('float64')
         rep_H = jnp.asarray(rep_H)
         # if self.quantumnoise:
@@ -129,7 +141,76 @@ class CSnGradient(FourierFilters):
     '''
     meta leanring using optax phase 
     '''
-    def step(self, Hparams, YJMparams):
-        grad_yjm = jax.grad(self.Expect_braket, argnums=0)(YJMparams, Hparams)
-        grad_h = jax.grad(self.Expect_braket, argnums=1)(YJMparams, Hparams)
-        
+    # @jax.jit
+    # def step(self, Hparams, YJMparams):
+    #     grad_yjm = jax.grad(self.Expect_braket, argnums=0)(YJMparams, Hparams)
+    #     grad_h = jax.grad(self.Expect_braket, argnums=1)(YJMparams, Hparams)
+    
+
+    def train(self, optimizer:optax.GradientTransformation): 
+        params_dict_init = self.random_params2()
+        opt_state = optimizer.init(params_dict_init)
+        loss_history, param_history = [], [params_dict_init]
+        @jax.jit
+        def step(params_dict, opt_state):
+            loss, grads = jax.value_and_grad(self.Expect_braket_energy, argnums=0)(params_dict)
+            updates, opt_state = optimizer.update(grads, opt_state, params_dict)
+            params_dict = optax.apply_updates(params_dict, updates)
+            return params_dict, opt_state, loss
+
+        for it in tqdm(range(1, self.max_iter + 1)): 
+            p_dict = param_history[-1]
+            # print('p_dict | YJM: {} | Heis: {}'.format(p_dict['YJM'].shape, p_dict['Heis']))
+            updated_p_dict, opt_state, loss = step(p_dict, opt_state)
+            # print("Step {:3d}   Cost_L = {:9.7f}".format(it, loss))
+            # updated_p_dict = {'YJM': p_dict['YJM'] - args.lr * gradient['YJM'],
+            #                 'Heis': p_dict['Heis'] - args.lr * gradient['Heis']}
+            param_history.append(updated_p_dict)
+            loss_history.append(loss)
+        return loss_history, param_history
+
+
+# def main():
+#     lattice4 =[[(1,2), (1,8), (2,3), (2,7), (3,4), (3,6), (4,5), (5,6), (5, 12),
+#             (6,7), (6, 11), (7, 10), (7, 8), (8,9), (9, 10), (10, 11), (11, 12)],
+
+#            [(1,3), (1,9), (1,7), (2,4), (2,8), (2, 10), (2, 6), (3, 11), (3,5), (3,7),
+#             (4, 12), (4, 6), (5, 7), (5, 11), (6, 8), (6, 10), (6, 12),  (7, 9), (7, 11), (8, 10),
+#             (9, 11), (10, 12)]]
+#     partit = [int(6),int(6)]
+#     Nsites = int( 12)    
+
+#     CsnFourier = CSnGradient(J= [1.0, args.J2], lattice = lattice4, Nsites=Nsites,
+#                     partit=partit,p=args.p, num_samples =int(1000), max_iter = int(5001), lr=args.lr)
+
+
+#     Ham_rep = CsnFourier.Ham_rep()
+
+#     # print(CsnFilters.rep_mat_H)
+#     E_gs, V_gs = eigh(Ham_rep.astype('float64'), subset_by_index=[0,1])
+#     V_gs = V_gs[:,0]
+#     E_gs = E_gs[0]
+#     V_gs = jnp.asarray(V_gs)
+#     print('True Ground state Energy via ED for partition {}:--- ({}) '.format(partit, E_gs))
+#     # print('True Ground State wavefuncion in Sn irrep basis for partition {}:--- {}'.format(partit, V_gs))
+
+#     print('Irrep Dims for {}: --- {}'.format(partit, CsnFourier.dim))
+
+#     print('now the gradient phase')
+    
+
+#     optimizer = optax.adamw(learning_rate=args.lr)
+#     loss_history, param_history =CsnFourier.train(optimizer)
+#     plt.style.use("seaborn")
+#     plt.plot(loss_history, "g", label='Sn-CQA Ansatz')
+#     plt.axhline(E_gs, color='r', linestyle='-', label='ED energy: {:.4f}'.format(E_gs))
+#     plt.ylabel("Cost function")
+#     plt.xlabel("Optimization steps")
+#     plt.legend(loc="upper right")
+#     plt.title(f'CQA Training with layers {args.p} with lattice size: {Nsites}') 
+#     plt.show()
+#     plt.savefig(f'Figures/CQA_p{args.p}_lattice{Nsites}')  
+
+
+# if __name__ =='__main__':
+#     main()

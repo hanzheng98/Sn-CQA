@@ -25,7 +25,7 @@ import optax
 
 
 class FourierFilters:
-    def __init__(self, J=None, lattice=None, Nsites=None, partit=None, p=1):
+    def __init__(self, J=None, lattice=None, Nsites=None, partit=None, p=1, Ham=None):
         self.J = J
         self.lattice = lattice
         self.Nsites = Nsites
@@ -43,7 +43,10 @@ class FourierFilters:
                 YJM = self.get_YJMs(i,j).astype('float64')
                 YJMs_mat[i,j,:] = np.diag(YJM)
         self.YJMs = jnp.asarray(YJMs_mat)
-        self.Ham = jnp.asarray(self.Ham_rep().astype('float64'))
+        if Ham is None: 
+            self.Ham = jnp.asarray(self.Ham_rep().astype('float64'))
+        else: 
+            self.Ham = jnp.asarray(Ham).astype('float64')
 
 
 
