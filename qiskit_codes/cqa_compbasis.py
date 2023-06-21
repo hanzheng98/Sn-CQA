@@ -57,14 +57,15 @@ class CQA(QuantumCircuit):
         self, 
         num_sites: int, 
         p: int, 
-        heisenberg: Optional[Union[PauliOp, PauliSumOp, PauliList, SparsePauliOp]], 
         irrep: list[int, int], 
         YJMparams: np.ndarray, 
         Heisparams: np.ndarray,
+        heisenberg: Optional[Union[PauliOp, PauliSumOp, PauliList, SparsePauliOp]]=None, 
         num_time_slices: int=1,
         debug: bool=False,
         name: str = 'Sn-CQA',
-        mode: Optional[str]='all'
+        mode: Optional[str]='all', 
+        method: Optional[str] ='Coxeter'
     ) -> QuantumCircuit: 
         self.num_sites = num_sites
         self.p = p 
@@ -76,17 +77,20 @@ class CQA(QuantumCircuit):
         self.num_time_slices = num_time_slices
         self.name = name
         self.mode = mode
+        self.method = method
         num_bell = 2*  (self.irrep[0] - abs(self.irrep[0] - self.irrep[1]))
         num_comp = abs(self.irrep[0] - self.irrep[1])
         'computing the state initialization method'
         q_comp = QuantumRegister(num_comp, 'zeros states')
-        q_bell = QuantumRegister(num_bell, 'bell' )
+        q_bell = QuantumRegister(num_bell )
         circuit = QuantumCircuit(q_comp, q_bell, name=self.name)
         if self.debug: 
             print('number of bell states: {}'.format(num_bell))
             print('num of the standard zeros states: {}'.format(num_comp))
         for i in range(0, num_bell-1):
             if i %2 ==0:
+                circuit.x(q_bell[i])
+                circuit.x(q_bell[i+1])
                 circuit.h(q_bell[i])
                 circuit.cnot(q_bell[i], q_bell[i+1])
         'Get the CQA ansatze in the computational basis'
@@ -97,7 +101,7 @@ class CQA(QuantumCircuit):
             print('print our problem hamiltonian: {}'.format(self.heisenberg))
         super().__init__(*circuit.qregs, name=circuit.name)
         for p in range(self.p): 
-            CQA_layer_circ = self._getCQA_layer(self.YJMparams[p], self.Heisparams[p])
+            CQA_layer_circ = self._getCQA_layer(self.YJMparams[p], self.Heisparams[p], p)
             circuit.append(CQA_layer_circ.to_instruction(), q_comp[:] + q_bell[:])
         self.compose(circuit, qubits=self.qubits, inplace=True)
         
@@ -147,7 +151,8 @@ class CQA(QuantumCircuit):
             YJM_ham = YJM_ham - self._getYJM(0)
         elif self.mode == 'random':
             yjmcoeffs =  yjmcoeffs.flatten()
-            selection = np.random.randint(0, self.num_sites, int(np.floor(self.num_sites / 3)))
+            # selection = np.random.randint(0, self.num_sites, int(np.floor(self.num_sites / 3)))
+            selection = [i for i in range(self.num_sites)]
             for k in range(len(selection)): 
                 # print(f'i {i} num {num}')
                 YJM_k = self._getYJM(selection[k])
@@ -214,33 +219,65 @@ class CQA(QuantumCircuit):
             return identity
 
     
-    def _getCQA_layer(self, yjmparam, heisparam):
+        
+    
+    def _getCQA_layer(self, yjmparam, heisparam, layer=Optional[int]):
         # if self.debug: 
         #     print(yjmparam.shape)
         #     print(self.heisenberg.mul(heisparam))
         YJM_ham = self._getYJMs(yjmparam)
         YJM_evo = YJM_ham.exp_i()
-        Heis_evo = (self.heisenberg.mul(heisparam)).exp_i()
-        if self.debug: 
-            print('coefficients for the YJM Hamilonian: {}'.format(np.imag(YJM_ham.coeffs)))
-            # print('YJM Hamiltonian: {}'.format(YJM_ham))
-            print('To check that if YJM Hamiltonian is hermitian: {}'.format(YJM_ham.is_hermitian()))
-            print('To check that if Heisenberg Hamiltonian is hermitian: {}'.format(self.heisenberg.is_hermitian()))
-            # YJM_ham.coeffs = np.real(YJM_ham.coeffs)
+        if self.method == 'Hamiltonian': 
+            Heis_evo = (self.heisenberg.mul(heisparam[0])).exp_i()
+            if self.debug: 
+                print('coefficients for the YJM Hamilonian: {}'.format(np.imag(YJM_ham.coeffs)))
+                # print('YJM Hamiltonian: {}'.format(YJM_ham))
+                print('To check that if YJM Hamiltonian is hermitian: {}'.format(YJM_ham.is_hermitian()))
+                print('To check that if Heisenberg Hamiltonian is hermitian: {}'.format(self.heisenberg.is_hermitian()))
+                # YJM_ham.coeffs = np.real(YJM_ham.coeffs)
+            # YJM_circuit = PauliTrotterEvolution(
+            #         trotter_mode='trotter',
+            #         reps=self.num_time_slices).convert(YJM_evo).to_circuit()
+            # Heis_circuit = PauliTrotterEvolution(
+            #         trotter_mode='trotter',
+            #         reps=self.num_time_slices).convert(Heis_evo).to_circuit()
+            # YJM_qc = QuantumCircuit(self.num_sites, name='exp(iYJM)')
+            # YJM_qc.append(YJM_circuit.to_instruction(), YJM_qc.qubits)
+            # Heis_qc = QuantumCircuit(self.num_sites, name='exp(iH_p)')
+            # Heis_qc.append(Heis_circuit.to_instruction(), Heis_qc.qubits)
+            # CQA_qc = QuantumCircuit(self.num_sites, name='CQA-Layer')
+            # CQA_qc.append(YJM_qc.to_instruction(), CQA_qc.qubits)
+            # CQA_qc.append(Heis_qc.to_instruction(), CQA_qc.qubits)
+            # CQA_layer_circ = Heis_circuit.to_circuit(name='exp(iH_p)').compose(YJM_circuit.to_circuit(name='exp(iYJM)'))
+        elif self.method == 'Coxeter': 
+            coxeters = self._transpo2pauli(0, 0)
+            if layer % 2 ==0: 
+                for i in range(self.num_sites -1): 
+                    if i % 2 ==0: 
+                        coxeters += self._transpo2pauli(i, i+1).mul(heisparam[int(i/2)])
+            if layer %2 ==1:
+                for i in range(self.num_sites -1): 
+                    if i % 2 ==1: 
+                        coxeters += self._transpo2pauli(i, i+1).mul(heisparam[int((i-1)/2)])
+            coxeters = coxeters - self._transpo2pauli(0, 0)
+            Heis_evo = coxeters.exp_i()
+        else: 
+            raise NotImplementedError
+        
         YJM_circuit = PauliTrotterEvolution(
-                trotter_mode='trotter',
-                reps=self.num_time_slices).convert(YJM_evo).to_circuit()
+                    trotter_mode='trotter',
+                    reps=self.num_time_slices).convert(YJM_evo).to_circuit()
         Heis_circuit = PauliTrotterEvolution(
                 trotter_mode='trotter',
                 reps=self.num_time_slices).convert(Heis_evo).to_circuit()
-        YJM_qc = QuantumCircuit(self.num_sites, name='exp(iYJM)')
+        YJM_qc = QuantumCircuit(self.num_sites, name=f'mixer')
         YJM_qc.append(YJM_circuit.to_instruction(), YJM_qc.qubits)
-        Heis_qc = QuantumCircuit(self.num_sites, name='exp(iH_p)')
+        Heis_qc = QuantumCircuit(self.num_sites, name=f'Commuting SWAPs')
         Heis_qc.append(Heis_circuit.to_instruction(), Heis_qc.qubits)
         CQA_qc = QuantumCircuit(self.num_sites, name='CQA-Layer')
         CQA_qc.append(YJM_qc.to_instruction(), CQA_qc.qubits)
         CQA_qc.append(Heis_qc.to_instruction(), CQA_qc.qubits)
-        # CQA_layer_circ = Heis_circuit.to_circuit(name='exp(iH_p)').compose(YJM_circuit.to_circuit(name='exp(iYJM)'))
+
         return CQA_qc
     
         

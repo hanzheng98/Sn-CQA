@@ -2,10 +2,10 @@ import numpy as np
 import matplotlib as plt
 import numpy.linalg as LA
 import scipy
-import netket as nk
+# import netket as nk
 import jax
 import jax.numpy as jnp
-import netket.nn as nknn
+# import netket.nn as nknn
 from jax import grad, jit, vmap
 from jax import random
 from scipy.sparse.linalg import eigsh

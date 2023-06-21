@@ -130,14 +130,7 @@ test on 3 x 4 squares
 #             (2,4), (3,10), (2,6), (6,11), (6,12), (9,11),
 #             (9, 12), (5, 8), (1,7), (7, 10), (5,9)]]
 # J = [1,0]
-lattice4 =[[(1,2), (1,8), (2,3), (2,7), (3,4), (3,6), (4,5), (5,6), (5, 12),
-            (6,7), (6, 11), (7, 10), (7, 8), (8,9), (9, 10), (10, 11), (11, 12)],
 
-           [(1,3), (1,9), (1,7), (2,4), (2,8), (2, 10), (2, 6), (3, 11), (3,5), (3,7),
-            (4, 12), (4, 6), (5, 7), (5, 11), (6, 8), (6, 10), (6, 12),  (7, 9), (7, 11), (8, 10),
-            (9, 11), (10, 12)]]
-partit = [int(6),int(6)]
-Nsites = int( 12)
 
 
 CsnFourier = CSnGradient(J= [1.0, args.J2], lattice = lattice4, Nsites=Nsites,
@@ -165,28 +158,28 @@ Sn-CQA Ansatze testing phase
 -----------------------------------------------------------------------------
 '''
 
-L = CsnFourier.Expect_braket
-# opt_YJM, opt_H = CsnFourier.CSn_nadam(L, scale=float(1e-2))
-optimized_energy, O_gs= CsnFourier.CSn_nadam(L, '6_sqaures', noise_scale=args.noise_scale, use_hessian=False)
+# L = CsnFourier.Expect_braket
+# # opt_YJM, opt_H = CsnFourier.CSn_nadam(L, scale=float(1e-2))
+# optimized_energy, O_gs= CsnFourier.CSn_nadam(L, '6_sqaures', noise_scale=args.noise_scale, use_hessian=False)
 
 
 
-# O_gs = CsnFourier.Groundstate(opt_YJM, opt_H)
-# optimized_energy = CsnFourier.Expect_braket_energy(opt_YJM, opt_H)
-# logging2 = {}
-# logging2['EDGstate'] = np.asarray(V_gs)
-# logging2['CQAGstate'] = np.asarray(O_gs)
-# CsnFourier.logging['overlap'] = np.dot(np.array(V_gs), np.array(O_gs))
-# CsnFourier.logging['precision'] = np.abs(E_gs - np.asarray(optimized_energy)) / np.abs(E_gs)
+# # O_gs = CsnFourier.Groundstate(opt_YJM, opt_H)
+# # optimized_energy = CsnFourier.Expect_braket_energy(opt_YJM, opt_H)
+# # logging2 = {}
+# # logging2['EDGstate'] = np.asarray(V_gs)
+# # logging2['CQAGstate'] = np.asarray(O_gs)
+# # CsnFourier.logging['overlap'] = np.dot(np.array(V_gs), np.array(O_gs))
+# # CsnFourier.logging['precision'] = np.abs(E_gs - np.asarray(optimized_energy)) / np.abs(E_gs)
 
-print('the optimized ground state: {}'.format(O_gs))
-print('------------------------------------')
-print('Optimized lowest energy: {}'.format(optimized_energy))
-print('-------------------------------------')
-print('True Ground State wavefuncion in Sn irrep basis: {}'.format(V_gs))
-print('-------------------------------------')
-print('The overlap between the optimized state and the ground state: {}'.format(jnp.dot(O_gs,
-                                                                               V_gs)))
+# print('the optimized ground state: {}'.format(O_gs))
+# print('------------------------------------')
+# print('Optimized lowest energy: {}'.format(optimized_energy))
+# print('-------------------------------------')
+# print('True Ground State wavefuncion in Sn irrep basis: {}'.format(V_gs))
+# print('-------------------------------------')
+# print('The overlap between the optimized state and the ground state: {}'.format(jnp.dot(O_gs,
+#                                                                                V_gs)))
 
 
 # import pandas as pd

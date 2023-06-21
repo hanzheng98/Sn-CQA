@@ -19,15 +19,15 @@ from scipy.linalg import eigh, eigvalsh
 # import pennylane.numpy as pnp 
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--lr', type=float, default=0.001)
-parser.add_argument('--p', type=int, default=2)
-parser.add_argument('--irrep', type=list, default=[2,2])
-parser.add_argument('--num_qubits', type=int, default=4)
-parser.add_argument('--num_yjms', type=int, default=1)
-parser.add_argument('--trotter_slice', type=int, default=2)
-parser.add_argument('--lattice_size', type=list, default=[1,2])
+parser.add_argument('--lr', type=float, default=0.2)
+parser.add_argument('--p', type=int, default=6)
+parser.add_argument('--irrep', type=list, default=[6,6])
+parser.add_argument('--num_qubits', type=int, default=12)
+parser.add_argument('--num_yjms', type=int, default=4)
+parser.add_argument('--trotter_slice', type=int, default=1)
+parser.add_argument('--lattice_size', type=list, default=[3,4])
 parser.add_argument('--J', type=list, default=[1.0, 0.0])
-parser.add_argument('--iterations', type=int, default=10)
+parser.add_argument('--iterations', type=int, default=1000)
 parser.add_argument('--TOKEN', type=str, default="4c84e8146c0def626bb384424f78598ee055148df74863d4cbad29fb99d5e9cd4808077115561b6490f6dc4a0f8014b24fe5985003cdbb88c17a51c80c55279a")
 parser.add_argument('--backend', type=str, default='ibm_perth')
 parser.add_argument('--device', type=int, default=-1) # 0 for classical simulation; 1 for ibm_qasm 2 for real quantum machine
@@ -63,20 +63,45 @@ Defining the Lattice Hamiltonian
 ------------------------------------------
 '''
 
-def getHam_square(lattice_size: Union[int, list], J: Optional[Union[list, int]], get_matrix: bool=False):
+def getHam_square_frust(lattice_size: Union[int, list], J: Optional[Union[list, int]], get_matrix: bool=False):
     '''
     Build the Heisenberg Hamiltonian 
     '''
     graph = nx.generators.lattice.grid_2d_graph(lattice_size[0],lattice_size[1])
     graph = nx.relabel.convert_node_labels_to_integers(graph)
-    obs = []
-    coeffs = []
+    A = np.array(nx.adjacency_matrix(graph).todense(), dtype=np.int32)
+    # print(A)
+    A2 = np.matmul(A, A)
+    # print(A2)
+    obs_J1 = []
+    coeffs_J1 = []
     for edge in graph.edges():
-        coeffs.extend([1.0, 1.0, 1.0])
-        obs.extend([qml.PauliX(edge[0]) @ qml.PauliX(edge[1]),
+        coeffs_J1.extend([1.0, 1.0, 1.0])
+        obs_J1.extend([qml.PauliX(edge[0]) @ qml.PauliX(edge[1]),
+                            qml.PauliY(edge[0]) @ qml.PauliY(edge[1]),
+                            qml.PauliZ(edge[0]) @ qml.PauliZ(edge[1])]) 
+    second_edges = []
+    for i in range(len(A2)): 
+        for j in range(i):
+            if A2[i, j] >0: 
+                # print('asa')
+                second_edges.append((i, j))
+    coeffs_J2 = []
+    obs_J2 = []
+    for edge in second_edges:
+        coeffs_J2.extend([1.0, 1.0, 1.0])
+        obs_J2.extend([qml.PauliX(edge[0]) @ qml.PauliX(edge[1]),
                             qml.PauliY(edge[0]) @ qml.PauliY(edge[1]),
                             qml.PauliZ(edge[0]) @ qml.PauliZ(edge[1])])
-    hamiltonian_heisenberg = qml.Hamiltonian(coeffs, obs) * J[0]
+    
+    # print(coeffs_J1)
+    # print(coeffs_J2)
+    # print(obs_J1)
+    # print(obs_J2)
+                 
+
+
+    hamiltonian_heisenberg = qml.Hamiltonian(coeffs_J1, obs_J1) * J[0] + qml.Hamiltonian(coeffs_J2, obs_J2) * J[1]
     if get_matrix: 
         # matrix = 0
         # for coeff, op in zip(hamiltonian_heisenberg.coeffs, hamiltonian_heisenberg.ops):
@@ -104,33 +129,40 @@ def state_init(irrep: list):
     num_bell = 2*  (irrep[0] - abs(irrep[0] - irrep[1]))
     # num_comp = abs(irrep[0] - irrep[1])
     for i in range(0, num_bell-1):
+        qml.PauliX(wires=i)
         if i %2 ==0:
             qml.Hadamard(wires=i)
             qml.CNOT(wires=[i,i+1]) 
+    qml.PauliX(wires=num_bell-1) 
 
 # Coxeter generators 
 
-def coxeters(heis_params: jnp.array, layer:int, trotter_slice:int=args.trotter_slice): 
+def coxeters(heis_params: jnp.array, layer:int, trotter_slice:int, num_qubits: int): 
     '''
     if p is even, return evens 
     if p is odd, return odds
     '''
     if layer % 2 == 0: 
-        for j, i  in enumerate(range(args.num_qubits)):
-            if i % 2 ==0 & i +1 < args.num_qubits:
+        for j, i  in enumerate(range(num_qubits)):
+            if i % 2 ==0 & i +1 < num_qubits:
                 # print(f'j, i: {j, i}')
                 swap = _swap2pauli(i, i+1, mode='ham')
                 qml.ApproxTimeEvolution(swap, heis_params[int(j/2)], trotter_slice)
     elif layer % 2==1:
-        for j, i in enumerate(range(args.num_qubits)):
-            if i % 2 ==1 & i +1 < args.num_quibts:
+        for j, i in enumerate(range(num_qubits)):
+            if i % 2 ==1 & i +1 < num_qubits:
                 swap = _swap2pauli(i, i+1, mode='ham')
                 qml.ApproxTimeEvolution(swap, heis_params[int((j-1)/2)], trotter_slice)
 
+
+
 # Do the Hamiltonian variational ansatz
 
-def var_ham_ans(heis_param: jnp.array, trotter_slice:int=args.trotter_slice): 
-    hamiltonian = getHam_square(args.lattice_size, args.J)
+def var_ham_ans(heis_param: jnp.array,
+                trotter_slice:int,
+                lattice_size:list, 
+                J:int): 
+    hamiltonian = getHam_square_frust(lattice_size, J)
     return qml.ApproxTimeEvolution(hamiltonian,heis_param, trotter_slice )
 
 # Do the YJM (only first order so far on Pennylane)
@@ -177,10 +209,10 @@ def _get_YJM(idx:int):
         return qml.Hamiltonian(np.ones(len(flat_yjm_lst)), flat_yjm_lst)
 
 
-def yjm_gates(yjm_params: jnp.array, trotter_slice:int=args.trotter_slice):
+def yjm_gates(yjm_params: jnp.array, trotter_slice:int, num_qubits:int, num_yjms:int):
     # num_yjms = int(np.floor(num_qubits /3))
     # selection = np.random.randint(1, args.num_qubits, args.num_yjms)
-    selection = random.sample(range(1, args.num_qubits), args.num_yjms)
+    selection = random.sample(range(1, num_qubits), num_yjms)
     for i, sel in enumerate(selection):
         YJM = _get_YJM(sel)
         qml.ApproxTimeEvolution(YJM, yjm_params[i], trotter_slice)
@@ -189,11 +221,11 @@ def yjm_gates(yjm_params: jnp.array, trotter_slice:int=args.trotter_slice):
 
 # Defining the CQA layer now 
 
-def cqa_layers(params_dict:dict, trotter_slice:int=args.trotter_slice): 
-    for layer in range(args.p):
-        coxeters(params_dict['Heis'][layer], layer=layer, trotter_slice=trotter_slice)
+def cqa_layers(params_dict:dict, trotter_slice:int, p:int, num_qubits:int, num_yjms:int): 
+    for layer in range(p):
+        coxeters(params_dict['Heis'][layer], layer=layer, trotter_slice=trotter_slice, num_qubits=num_qubits)
         # var_ham_ans(params_dict['Heis'][layer,0], trotter_slice=trotter_slice)
-        yjm_gates(params_dict['YJM'][layer], trotter_slice =trotter_slice)
+        yjm_gates(params_dict['YJM'][layer], trotter_slice =trotter_slice, num_qubits=num_qubits, num_yjms=num_yjms)
     # hamiltonian = getHam_square(args.lattice_size, args.J)
     # return qml.expval(hamiltonian)
 
@@ -210,12 +242,18 @@ Measuring wrt. the Heisenberg Hamiltonian
 # dev = qml.device("default.qubit", wires=args.num_qubits)
 
 @qml.qnode(dev_mu, interface='jax')
-def cqa_circuit(params_dict: dict, check_symmetry:bool=False, trotter_slice:int=args.trotter_slice):
-    state_init(args.irrep)
-    cqa_layers(params_dict, trotter_slice=trotter_slice)
+def cqa_circuit(params_dict: dict, 
+                trotter_slice:int=args.trotter_slice,
+                num_qubits:int=args.num_qubits,
+                irrep:list=args.irrep, 
+                p:int=args.p,
+                num_yjms:int=args.num_yjms,
+                check_symmetry:bool=False):
+    state_init(irrep)
+    cqa_layers(params_dict, trotter_slice=trotter_slice, p=p, num_qubits=num_qubits, num_yjms=num_yjms)
     # hamiltonian = getHam_square(args.lattice_size, args.J)
     if check_symmetry is False:
-        hamiltonian = getHam_square(args.lattice_size, args.J) 
+        hamiltonian = getHam_square_frust(args.lattice_size, args.J) 
         return qml.expval(hamiltonian)
     else: 
         su2_pauli = qml.PauliZ(0)
@@ -361,7 +399,7 @@ def main():
 
     # Compute the exact gound state 
 
-    ham_mat = getHam_square(args.lattice_size, args.J, get_matrix=True)
+    ham_mat = getHam_square_frust(args.lattice_size, args.J, get_matrix=True)
     # print(ham_mat.shape)
     E_gs, V_gs = eigh(ham_mat.astype('float64'), subset_by_index=[0,1])
     V_gs = V_gs[:,0]
@@ -380,10 +418,12 @@ def main():
     plt.legend(loc="upper right")
     plt.title(f'CQA Training with layers {args.p} with lattice size: {args.num_qubits}') 
     plt.show()
-    if args.device == 0: 
-        plt.savefig(f'Figures/CQA_p{args.p}_lattice{args.num_qubits}')
-    elif args.device ==1: 
+    if args.device == -1: 
+        plt.savefig(f'Figures/frustration/CQA_p{args.p}_lattice{args.num_qubits}')
+    elif args.device ==0: 
         plt.savefig(f'Figures/niose/CQA_p{args.p}_lattice{args.num_qubits}') 
+    loss_history = jnp.array(loss_history)
+    jnp.save(f'./loss_with_{args.lattice_size}', loss_history)
 
 if __name__ == '__main__':
     main()

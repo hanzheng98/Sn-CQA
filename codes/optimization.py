@@ -33,6 +33,7 @@ from tqdm import tqdm
 # parser.add_argument('--lr', type=float, required=True)
 # parser.add_argument('--J2', type=float, required=True)
 # parser.add_argument('--p', type=int, default=4)
+# parser.add_argument('--iterations', type=int, default=10)
 # args = parser.parse_args()
 
 
@@ -46,10 +47,11 @@ class CSnGradient(FourierFilters):
 
     '''
 
-    def __init__(self, lr=float(2e-3), max_iter=int(1001), gamma=float(0.95),meta_lr = 0.03 ,num_samples=None, quantumnoise = True ,**kwargs):
+    def __init__(self, lr=float(2e-3), max_iter=int(1001), gamma=float(0.95), sigma=0.01 ,num_samples=None, quantumnoise = False, seed=0,**kwargs):
         super(CSnGradient, self).__init__(**kwargs)
         self.lr = jnp.array(lr) 
-        self.meta_lr = jnp.array(meta_lr)
+        # self.meta_lr = jnp.array(meta_lr)
+        self.sigma = sigma
         self.max_iter = max_iter
         self.gamma = gamma
         self.sampling = np.random.randint(0, high=self.dim, size=num_samples)
@@ -59,6 +61,7 @@ class CSnGradient(FourierFilters):
         self.quantumnoise = quantumnoise
         self.logging = {'energy': [], 'iteration':[]}
         self.logging2 = {'CQAGstate': [], 'iteration':[]}
+        self.seed = seed
 
 
 
@@ -155,6 +158,7 @@ class CSnGradient(FourierFilters):
         def step(params_dict, opt_state):
             loss, grads = jax.value_and_grad(self.Expect_braket_energy, argnums=0)(params_dict)
             updates, opt_state = optimizer.update(grads, opt_state, params_dict)
+            # print(opt_state.hyperparams.keys())
             params_dict = optax.apply_updates(params_dict, updates)
             return params_dict, opt_state, loss
 
@@ -162,6 +166,18 @@ class CSnGradient(FourierFilters):
             p_dict = param_history[-1]
             # print('p_dict | YJM: {} | Heis: {}'.format(p_dict['YJM'].shape, p_dict['Heis']))
             updated_p_dict, opt_state, loss = step(p_dict, opt_state)
+            if self.quantumnoise: 
+                w_key, b_key = random.split(random.PRNGKey(self.seed)) 
+                w_noise = opt_state.hyperparams['learning_rate'] * self.sigma *jax.random.normal(w_key, updated_p_dict['Heis'].shape)
+                b_noise = opt_state.hyperparams['learning_rate'] * self.sigma * jax.random.normal(b_key, updated_p_dict['YJM'].shape)
+                updated_p_dict['Heis'] += w_noise 
+                updated_p_dict['YJM'] += b_noise
+                
+            # print(it)
+            # if it % 20 ==0:
+            #     if opt_state.hyperparams['learning_rate'] >= 1e-4:
+            #         opt_state.hyperparams['learning_rate'] = opt_state.hyperparams['learning_rate'] / 2
+            #     print('learning rate now: {}'.format(opt_state.hyperparams['learning_rate']))
             # print("Step {:3d}   Cost_L = {:9.7f}".format(it, loss))
             # updated_p_dict = {'YJM': p_dict['YJM'] - args.lr * gradient['YJM'],
             #                 'Heis': p_dict['Heis'] - args.lr * gradient['Heis']}
@@ -181,7 +197,7 @@ class CSnGradient(FourierFilters):
 #     Nsites = int( 12)    
 
 #     CsnFourier = CSnGradient(J= [1.0, args.J2], lattice = lattice4, Nsites=Nsites,
-#                     partit=partit,p=args.p, num_samples =int(1000), max_iter = int(5001), lr=args.lr)
+#                     partit=partit,p=args.p, num_samples =int(1000), max_iter = args.iterations, lr=args.lr)
 
 
 #     Ham_rep = CsnFourier.Ham_rep()
@@ -198,9 +214,9 @@ class CSnGradient(FourierFilters):
 
 #     print('now the gradient phase')
     
-
-#     optimizer = optax.adamw(learning_rate=args.lr)
-#     loss_history, param_history =CsnFourier.train(optimizer)
+#     scheduled_adam = optax.inject_hyperparams(optax.adamw)(learning_rate=args.lr)
+#     # optimizer = optax.adamw(learning_rate=args.lr)
+#     loss_history, param_history =CsnFourier.train(scheduled_adam)
 #     plt.style.use("seaborn")
 #     plt.plot(loss_history, "g", label='Sn-CQA Ansatz')
 #     plt.axhline(E_gs, color='r', linestyle='-', label='ED energy: {:.4f}'.format(E_gs))
