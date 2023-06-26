@@ -65,7 +65,7 @@ class CQA(QuantumCircuit):
         debug: bool=False,
         name: str = 'Sn-CQA',
         mode: Optional[str]='all', 
-        method: Optional[str] ='Coxeter'
+        method: Optional[str] ='Hamiltonian'
     ) -> QuantumCircuit: 
         self.num_sites = num_sites
         self.p = p 
