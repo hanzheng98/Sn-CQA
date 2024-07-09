@@ -83,7 +83,9 @@ def main():
             (9, 11), (10, 12)]]
     else: 
         raise NotImplementedError
-    model = CQAFourier(args.J, args.num_sites, args.p, args.irrep, lattice, args.ham_scale ,debug=True)
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    print(f"Using device: {device}")
+    model = CQAFourier(args.J, args.num_sites, args.p, args.irrep, lattice, args.ham_scale ,debug=True).to(device)
     # optimizer = SGD(model.parameters(), lr=args.lr)
     optimizer = LBFGS(model.parameters(), lr=1)
     scheduler = ReduceLROnPlateau(optimizer,mode='min', factor=0.5, patience=10, min_lr=0.000005)
